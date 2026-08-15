@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureDatabaseReady } from '@/lib/db';
 import { treatmentPlans, treatmentPhases, treatmentModules, treatmentPlanReviews } from '@/lib/db/schema';
 import { asc, desc, eq } from 'drizzle-orm';
 
 export async function GET() {
   try {
+    await ensureDatabaseReady();
+
     const plans = await db
       .select()
       .from(treatmentPlans)
-      .orderBy(desc(treatmentPlans.createdAt))
-      .catch(() => []);
+      .orderBy(desc(treatmentPlans.createdAt));
 
     const plan = plans.find((item) => item.status === 'active') || plans[0] || null;
     if (!plan) return NextResponse.json({ plan: null, phases: [], modules: [], reviews: [] });
@@ -37,12 +38,17 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error('Treatment plan GET error:', error);
-    return NextResponse.json({ error: 'Therapieplan konnte nicht geladen werden' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Therapieplan konnte nicht initialisiert oder geladen werden', detail: error?.message || String(error) },
+      { status: 500 },
+    );
   }
 }
 
 export async function POST(request: Request) {
   try {
+    await ensureDatabaseReady();
+
     const body = await request.json();
     const { treatmentPlanId, progressSummary } = body;
 
