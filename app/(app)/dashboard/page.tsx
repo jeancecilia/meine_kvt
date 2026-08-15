@@ -21,14 +21,14 @@ import {
 export const revalidate = 0;
 
 export default async function DashboardPage() {
-  const latestCheckins = await db.select().from(dailyCheckins).orderBy(desc(dailyCheckins.date)).limit(1);
-  const activeExperiments = await db.select().from(experiments).where(eq(experiments.status, 'active')).limit(1);
-  const activeHypotheses = await db.select().from(hypotheses).where(eq(hypotheses.status, 'active')).limit(1);
-  const activeGoals = await db.select().from(therapyGoals).where(eq(therapyGoals.status, 'active')).limit(3);
+  const latestCheckins = await db.select().from(dailyCheckins).orderBy(desc(dailyCheckins.date)).limit(1).catch(() => []);
+  const activeExperiments = await db.select().from(experiments).where(eq(experiments.status, 'active')).limit(1).catch(() => []);
+  const activeHypotheses = await db.select().from(hypotheses).where(eq(hypotheses.status, 'active')).limit(1).catch(() => []);
+  const activeGoals = await db.select().from(therapyGoals).where(eq(therapyGoals.status, 'active')).limit(3).catch(() => []);
 
-  const checkin = latestCheckins[0];
-  const activeExp = activeExperiments[0];
-  const mainHypothesis = activeHypotheses[0];
+  const checkin = latestCheckins[0] || null;
+  const activeExp = activeExperiments[0] || null;
+  const mainHypothesis = activeHypotheses[0] || null;
 
   const currentDate = new Date().toLocaleDateString('de-DE', {
     weekday: 'long',
