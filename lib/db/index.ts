@@ -3,7 +3,7 @@ import postgres from 'postgres';
 import * as schema from './schema';
 import { bootstrapDatabase } from './bootstrap';
 
-const connectionString = process.env.DATABASE_URL || 'postgres://therapy:therapy_password@localhost:5432/therapy';
+const connectionString = process.env.DATABASE_URL || 'postgres://therapy:therapy_password@localhost:5433/therapy';
 
 export const client = postgres(connectionString, {
   max: 10,
