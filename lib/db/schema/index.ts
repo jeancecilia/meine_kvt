@@ -11,11 +11,67 @@ export const patientProfile = pgTable('patient_profile', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// Versioned master treatment plan
+export const treatmentPlans = pgTable('treatment_plans', {
+  id: text('id').primaryKey(),
+  version: text('version').notNull().unique(),
+  title: text('title').notNull(),
+  overallGoal: text('overall_goal').notNull(),
+  status: text('status').notNull().default('active'), // 'draft' | 'active' | 'completed' | 'superseded'
+  startedAt: text('started_at').notNull(),
+  plannedEndAt: text('planned_end_at'),
+  reviewDueAt: text('review_due_at'),
+  supersedesPlanId: text('supersedes_plan_id'),
+  changeReason: text('change_reason'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const treatmentPhases = pgTable('treatment_phases', {
+  id: text('id').primaryKey(),
+  treatmentPlanId: text('treatment_plan_id').references(() => treatmentPlans.id, { onDelete: 'cascade' }).notNull(),
+  phaseNumber: integer('phase_number').notNull(),
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  objective: text('objective').notNull(),
+  status: text('status').notNull().default('planned'), // 'planned' | 'active' | 'completed' | 'paused'
+  plannedStart: text('planned_start'),
+  plannedEnd: text('planned_end'),
+  actualStart: text('actual_start'),
+  actualEnd: text('actual_end'),
+  successCriteria: jsonb('success_criteria').default([]),
+  exitCriteria: jsonb('exit_criteria').default([]),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const treatmentModules = pgTable('treatment_modules', {
+  id: text('id').primaryKey(),
+  phaseId: text('phase_id').references(() => treatmentPhases.id, { onDelete: 'cascade' }).notNull(),
+  type: text('type').notNull(), // assessment | cbt | positive_affect | act | adhd_reward | schema | interpersonal | cbasp | relapse_prevention
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  status: text('status').notNull().default('planned'), // planned | active | completed | paused
+  orderIndex: integer('order_index').notNull().default(1),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const treatmentPlanReviews = pgTable('treatment_plan_reviews', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  treatmentPlanId: text('treatment_plan_id').references(() => treatmentPlans.id, { onDelete: 'cascade' }).notNull(),
+  reviewedAt: timestamp('reviewed_at').defaultNow().notNull(),
+  progressSummary: text('progress_summary').notNull(),
+  whatWorked: jsonb('what_worked').default([]),
+  whatDidNotWork: jsonb('what_did_not_work').default([]),
+  hypothesisChanges: jsonb('hypothesis_changes').default([]),
+  recommendedChanges: jsonb('recommended_changes').default([]),
+  nextReviewAt: text('next_review_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // Daily Check-ins (0.0-10.0 numeric ratings with UNIQUE date for idempotent upserts)
 export const dailyCheckins = pgTable('daily_checkins', {
   id: uuid('id').defaultRandom().primaryKey(),
   date: text('date').notNull().unique(),
-  mood: numeric('mood', { precision: 3, scale: 1 }).notNull(), // 0.0-10.0
+  mood: numeric('mood', { precision: 3, scale: 1 }).notNull(),
   fulfillment: numeric('fulfillment', { precision: 3, scale: 1 }).notNull(),
   loneliness: numeric('loneliness', { precision: 3, scale: 1 }).notNull(),
   innerCalm: numeric('inner_calm', { precision: 3, scale: 1 }).notNull(),
@@ -31,13 +87,14 @@ export const dailyCheckins = pgTable('daily_checkins', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Therapy Goals (Versioned Objectives)
+// Therapy Goals
 export const therapyGoals = pgTable('therapy_goals', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  treatmentPlanId: text('treatment_plan_id').references(() => treatmentPlans.id, { onDelete: 'set null' }),
   orderIndex: integer('order_index').notNull().default(1),
   title: text('title').notNull(),
   description: text('description').notNull(),
-  status: text('status').notNull().default('active'), // 'active' | 'achieved' | 'paused'
+  status: text('status').notNull().default('active'),
   targetDate: text('target_date'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -45,26 +102,26 @@ export const therapyGoals = pgTable('therapy_goals', {
 // Therapy Sessions
 export const therapySessions = pgTable('therapy_sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
+  treatmentPlanId: text('treatment_plan_id').references(() => treatmentPlans.id, { onDelete: 'set null' }),
+  treatmentPhaseId: text('treatment_phase_id').references(() => treatmentPhases.id, { onDelete: 'set null' }),
   startedAt: timestamp('started_at').defaultNow().notNull(),
   endedAt: timestamp('ended_at'),
-  sessionType: text('session_type').notNull().default('weekly'), // 'weekly' | 'focused' | 'quick'
+  sessionType: text('session_type').notNull().default('weekly'),
   mainTopic: text('main_topic'),
-  status: text('status').notNull().default('active'), // 'active' | 'completed' | 'cancelled'
-  riskLevel: integer('risk_level').notNull().default(0), // 0-3
+  status: text('status').notNull().default('active'),
+  riskLevel: integer('risk_level').notNull().default(0),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Therapy Session Messages
 export const therapyMessages = pgTable('therapy_messages', {
   id: uuid('id').defaultRandom().primaryKey(),
   sessionId: uuid('session_id').references(() => therapySessions.id, { onDelete: 'cascade' }).notNull(),
-  role: text('role').notNull(), // 'user' | 'assistant' | 'system'
+  role: text('role').notNull(),
   content: text('content').notNull(),
   structuredData: jsonb('structured_data'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Session Summaries
 export const sessionSummaries = pgTable('session_summaries', {
   id: uuid('id').defaultRandom().primaryKey(),
   sessionId: uuid('session_id').references(() => therapySessions.id, { onDelete: 'cascade' }).notNull(),
@@ -77,7 +134,7 @@ export const sessionSummaries = pgTable('session_summaries', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Situations (Structured 5-Step CBT Situation Analysis)
+// Situations (Structured CBT Situation Analysis)
 export const situations = pgTable('situations', {
   id: uuid('id').defaultRandom().primaryKey(),
   occurredAt: timestamp('occurred_at').defaultNow().notNull(),
@@ -86,7 +143,7 @@ export const situations = pgTable('situations', {
   objectiveEvent: text('objective_event').notNull(),
   expectation: text('expectation'),
   actualFeeling: text('actual_feeling'),
-  emotionRatings: jsonb('emotion_ratings').default({}), // e.g. {"loneliness": 7, "melancholy": 5}
+  emotionRatings: jsonb('emotion_ratings').default({}),
   automaticThoughts: text('automatic_thoughts').notNull(),
   behaviorReaction: text('behavior_reaction').notNull(),
   shortTermConsequence: text('short_term_consequence'),
@@ -100,20 +157,19 @@ export const hypotheses = pgTable('hypotheses', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   title: text('title').notNull(),
   description: text('description').notNull(),
-  confidence: numeric('confidence', { precision: 3, scale: 2 }).notNull().default('0.50'), // 0.00 - 1.00
-  status: text('status').notNull().default('active'), // 'active' | 'confirmed' | 'rejected'
+  confidence: numeric('confidence', { precision: 3, scale: 2 }).notNull().default('0.50'),
+  status: text('status').notNull().default('active'),
   lastReviewedAt: timestamp('last_reviewed_at').defaultNow(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Hypothesis Evidence
 export const hypothesisEvidence = pgTable('hypothesis_evidence', {
   id: uuid('id').defaultRandom().primaryKey(),
   hypothesisId: text('hypothesis_id').references(() => hypotheses.id, { onDelete: 'cascade' }).notNull(),
-  sourceType: text('source_type').notNull(), // 'situation' | 'session' | 'checkin' | 'journal'
+  sourceType: text('source_type').notNull(),
   sourceId: text('source_id'),
-  direction: text('direction').notNull(), // 'supports' | 'contradicts' | 'neutral'
+  direction: text('direction').notNull(),
   weight: numeric('weight', { precision: 3, scale: 2 }).default('1.00'),
   description: text('description').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -122,25 +178,26 @@ export const hypothesisEvidence = pgTable('hypothesis_evidence', {
 // Behavioral Experiments
 export const experiments = pgTable('experiments', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  treatmentPlanId: text('treatment_plan_id').references(() => treatmentPlans.id, { onDelete: 'set null' }),
+  treatmentPhaseId: text('treatment_phase_id').references(() => treatmentPhases.id, { onDelete: 'set null' }),
   title: text('title').notNull(),
   hypothesis: text('hypothesis').notNull(),
   prediction: text('prediction').notNull(),
   instructions: text('instructions'),
   startDate: text('start_date').notNull(),
   endDate: text('end_date').notNull(),
-  status: text('status').notNull().default('active'), // 'planned' | 'active' | 'completed' | 'abandoned'
+  status: text('status').notNull().default('active'),
   result: text('result'),
   learning: text('learning'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Experiment Observations (Concrete Before vs After Ratings including mood_before/mood_after)
 export const experimentObservations = pgTable('experiment_observations', {
   id: uuid('id').defaultRandom().primaryKey(),
   experimentId: text('experiment_id').references(() => experiments.id, { onDelete: 'cascade' }).notNull(),
   observedAt: timestamp('observed_at').defaultNow().notNull(),
   triggerSituation: text('trigger_situation'),
-  moodBefore: numeric('mood_before', { precision: 3, scale: 1 }), // 0.0 - 10.0
+  moodBefore: numeric('mood_before', { precision: 3, scale: 1 }),
   moodAfter: numeric('mood_after', { precision: 3, scale: 1 }),
   lonelinessBefore: numeric('loneliness_before', { precision: 3, scale: 1 }).notNull(),
   lonelinessAfter: numeric('loneliness_after', { precision: 3, scale: 1 }),
@@ -158,7 +215,7 @@ export const experimentObservations = pgTable('experiment_observations', {
 // Case Formulations (Versioned v0.1, v0.2...)
 export const caseFormulations = pgTable('case_formulations', {
   id: text('id').primaryKey(),
-  version: text('version').notNull(), // 'v0.1'
+  version: text('version').notNull(),
   summary: text('summary').notNull(),
   predisposingFactors: jsonb('predisposing_factors').default([]),
   triggeringFactors: jsonb('triggering_factors').default([]),
@@ -187,5 +244,27 @@ export const values = pgTable('values', {
   importance: integer('importance').notNull().default(5),
   currentAlignment: integer('current_alignment').notNull().default(5),
   behavioralDefinition: text('behavioral_definition'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Standardized outcome assessments (PHQ-9 etc.)
+export const assessments = pgTable('assessments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  treatmentPlanId: text('treatment_plan_id').references(() => treatmentPlans.id, { onDelete: 'set null' }),
+  treatmentPhaseId: text('treatment_phase_id').references(() => treatmentPhases.id, { onDelete: 'set null' }),
+  instrument: text('instrument').notNull(),
+  assessmentDate: text('assessment_date').notNull(),
+  totalScore: numeric('total_score', { precision: 5, scale: 1 }),
+  severity: text('severity'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const assessmentResponses = pgTable('assessment_responses', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  assessmentId: uuid('assessment_id').references(() => assessments.id, { onDelete: 'cascade' }).notNull(),
+  itemKey: text('item_key').notNull(),
+  prompt: text('prompt').notNull(),
+  response: integer('response').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

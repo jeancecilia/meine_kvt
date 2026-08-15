@@ -16,7 +16,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nachricht erforderlich' }, { status: 400 });
     }
 
-    // 1. Safety Pre-Check
     const safetyCheck = evaluateSafetyRisk(message);
     if (safetyCheck.isHighRisk) {
       return NextResponse.json({
@@ -27,21 +26,28 @@ export async function POST(request: Request) {
       });
     }
 
-    // 2. Ensure or create therapy session
+    // Build the treatment-plan aware context before creating a new session so the session
+    // can be linked to the exact plan and phase that guided it.
+    const contextData = await buildTherapyContext(sessionType || 'weekly');
+
     let currentSessionId = sessionId;
     if (!currentSessionId) {
+      const plan = contextData.summaryContext.activePlan;
+      const phase = contextData.summaryContext.activePhase;
       const newSession = await db.insert(therapySessions).values({
+        treatmentPlanId: plan?.id || null,
+        treatmentPhaseId: phase?.id || null,
         sessionType: sessionType || 'weekly',
-        mainTopic: sessionType === 'weekly' ? 'Wöchentliche KVT/ACT Struktursitzung' : 'Fokussierte Kognitionsanalyse',
+        mainTopic: sessionType === 'weekly'
+          ? `Wöchentliche Struktursitzung${phase ? ` – Phase ${phase.phaseNumber}: ${phase.title}` : ''}`
+          : sessionType === 'quick'
+          ? 'Akute Kurzintervention'
+          : `Fokussierte Themenanalyse${phase ? ` – ${phase.title}` : ''}`,
         status: 'active',
       }).returning();
       currentSessionId = newSession[0].id;
     }
 
-    // 3. Build Dynamic Therapy Context directly from PostgreSQL database
-    const contextData = await buildTherapyContext(sessionType || 'weekly');
-
-    // Fetch previous messages for this session
     const previousMessages = await db
       .select()
       .from(therapyMessages)
@@ -49,14 +55,12 @@ export async function POST(request: Request) {
       .orderBy(therapyMessages.createdAt)
       .catch(() => []);
 
-    // Save user message to database
     await db.insert(therapyMessages).values({
       sessionId: currentSessionId,
       role: 'user',
       content: message,
     }).catch((err) => console.warn('Could not save user message:', err?.message));
 
-    // 4. Generate Assistant Response
     let assistantReply = '';
 
     if (openai) {
@@ -72,24 +76,17 @@ export async function POST(request: Request) {
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: messagesPayload,
-        temperature: 0.7,
-        max_tokens: 800,
+        temperature: 0.6,
+        max_tokens: 900,
       });
 
-      assistantReply = completion.choices[0]?.message?.content || 'Ich habe deine Nachricht erhalten. Lass uns das strukturiert analysieren.';
+      assistantReply = completion.choices[0]?.message?.content || 'Ich habe deine Nachricht erfasst. Lass uns sie innerhalb unserer aktuellen Therapiephase strukturiert prüfen.';
     } else {
-      // Dynamic, epistemically humble fallback response that quotes actual data
-      const expName = contextData.summaryContext.activeExperiment?.title || 'unser aktives Experiment';
-      assistantReply = `Ich habe deine Schilderung erfasst. Lass uns das im Lichte unserer aktuellen Datenbankdaten betrachten:
-
-1. **Beobachtung & Einordnung:** Du beschreibst hier einen konkreten Moment zwischen deinem aktuellen Zustand und dem Impuls nach Veränderung bzw. Stimulation.
-2. **Arbeitshypothese prüfen:** Als offene Arbeitshypothese untersuchen wir aktuell, ob das Bedürfnis primär zwischenmenschliche Verbundenheit oder eher neurobiologische Neuheit ist.
-3. **Experimenteller Bezug (${expName}):** Welche Beobachtung machst du bezüglich deiner aktuellen Stimmung und Einsamkeit im Vergleich zu unserem Testauftrag?
-
-Wie intensiv schätzt du deine Einsamkeit und deinen Drang nach Neuem in genau diesem Moment ein?`;
+      const expName = contextData.summaryContext.activeExperiment?.title || 'das aktuelle Experiment';
+      const phase = contextData.summaryContext.activePhase;
+      assistantReply = `Wir bleiben bei unserer aktuellen Arbeitshypothese und prüfen sie anhand der Daten statt sie vorauszusetzen.\n\n${phase ? `Aktuelle Phase: **Phase ${phase.phaseNumber} – ${phase.title}**.` : ''}\nAktuelles Experiment: **${expName}**.\n\nWas war unmittelbar vor dem Impuls stärker: Einsamkeit/Verbundenheitsbedarf, romantisch-sexuelles Interesse oder der Wunsch nach Neuheit? Und wie hoch waren diese drei Komponenten jeweils von 0–10?`;
     }
 
-    // Save assistant reply to database
     await db.insert(therapyMessages).values({
       sessionId: currentSessionId,
       role: 'assistant',
@@ -99,6 +96,8 @@ Wie intensiv schätzt du deine Einsamkeit und deinen Drang nach Neuem in genau d
     return NextResponse.json({
       sessionId: currentSessionId,
       reply: assistantReply,
+      treatmentPlan: contextData.summaryContext.activePlan,
+      treatmentPhase: contextData.summaryContext.activePhase,
     });
   } catch (error: any) {
     console.error('Therapy chat error:', error);

@@ -9,8 +9,12 @@ import {
   situations,
   sessionSummaries,
   patientProfile,
+  treatmentPlans,
+  treatmentPhases,
+  treatmentModules,
+  treatmentPlanReviews,
 } from '@/lib/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { asc, desc, eq } from 'drizzle-orm';
 
 export interface TherapyContextData {
   systemPrompt: string;
@@ -20,15 +24,58 @@ export interface TherapyContextData {
     activeHypothesesCount: number;
     activeExperiment: any;
     observationsCount: number;
+    activePlan: any;
+    activePhase: any;
+    activeModules: any[];
   };
 }
 
 export async function buildTherapyContext(sessionType: string = 'weekly'): Promise<TherapyContextData> {
-  // 1. Fetch Patient Profile
   const profiles = await db.select().from(patientProfile).limit(1).catch(() => []);
   const profile = profiles[0] || { displayName: 'Patient', timezone: 'Europe/Berlin' };
 
-  // 2. Fetch Recent Check-ins (Last 7 entries)
+  // Master treatment plan must come before individual techniques.
+  const plans = await db
+    .select()
+    .from(treatmentPlans)
+    .where(eq(treatmentPlans.status, 'active'))
+    .orderBy(desc(treatmentPlans.createdAt))
+    .limit(1)
+    .catch(() => []);
+  const activePlan = plans[0] || null;
+
+  let activePhase: any = null;
+  let activeModules: any[] = [];
+  let latestPlanReview: any = null;
+
+  if (activePlan) {
+    const phases = await db
+      .select()
+      .from(treatmentPhases)
+      .where(eq(treatmentPhases.treatmentPlanId, activePlan.id))
+      .orderBy(asc(treatmentPhases.phaseNumber))
+      .catch(() => []);
+    activePhase = phases.find((p) => p.status === 'active') || phases.find((p) => p.status === 'planned') || null;
+
+    if (activePhase) {
+      activeModules = await db
+        .select()
+        .from(treatmentModules)
+        .where(eq(treatmentModules.phaseId, activePhase.id))
+        .orderBy(asc(treatmentModules.orderIndex))
+        .catch(() => []);
+    }
+
+    const reviews = await db
+      .select()
+      .from(treatmentPlanReviews)
+      .where(eq(treatmentPlanReviews.treatmentPlanId, activePlan.id))
+      .orderBy(desc(treatmentPlanReviews.reviewedAt))
+      .limit(1)
+      .catch(() => []);
+    latestPlanReview = reviews[0] || null;
+  }
+
   const checkins = await db
     .select()
     .from(dailyCheckins)
@@ -36,7 +83,6 @@ export async function buildTherapyContext(sessionType: string = 'weekly'): Promi
     .limit(7)
     .catch(() => []);
 
-  // 3. Fetch Active Therapy Goals
   const goals = await db
     .select()
     .from(therapyGoals)
@@ -44,7 +90,6 @@ export async function buildTherapyContext(sessionType: string = 'weekly'): Promi
     .orderBy(therapyGoals.orderIndex)
     .catch(() => []);
 
-  // 4. Fetch Latest Case Formulation
   const formulations = await db
     .select()
     .from(caseFormulations)
@@ -53,7 +98,6 @@ export async function buildTherapyContext(sessionType: string = 'weekly'): Promi
     .catch(() => []);
   const currentFormulation = formulations[0] || null;
 
-  // 5. Fetch Active Hypotheses
   const activeHypotheses = await db
     .select()
     .from(hypotheses)
@@ -61,7 +105,6 @@ export async function buildTherapyContext(sessionType: string = 'weekly'): Promi
     .orderBy(desc(hypotheses.confidence))
     .catch(() => []);
 
-  // 6. Fetch Active Experiments & Observations
   const activeExps = await db
     .select()
     .from(experiments)
@@ -77,125 +120,139 @@ export async function buildTherapyContext(sessionType: string = 'weekly'): Promi
       .from(experimentObservations)
       .where(eq(experimentObservations.experimentId, activeExp.id))
       .orderBy(desc(experimentObservations.observedAt))
-      .limit(5)
+      .limit(8)
       .catch(() => []);
   }
 
-  // 7. Fetch Recent Situations (Last 3)
   const recentSituations = await db
     .select()
     .from(situations)
     .orderBy(desc(situations.occurredAt))
-    .limit(3)
+    .limit(4)
     .catch(() => []);
 
-  // 8. Fetch Recent Session Summaries (Last 2)
   const recentSummaries = await db
     .select()
     .from(sessionSummaries)
     .orderBy(desc(sessionSummaries.createdAt))
-    .limit(2)
+    .limit(3)
     .catch(() => []);
 
-  // Format Check-in Data
-  const checkinSummary = checkins.length > 0
-    ? checkins.map((c) => {
-        return `• Datum: ${c.date} | Stimmung: ${c.mood}, Erfüllung: ${c.fulfillment}, Einsamkeit: ${c.loneliness}, Innere Ruhe: ${c.innerCalm}, Freude: ${c.joy}, Grübeln: ${c.rumination}, Zukunftsangst: ${c.futureAnxiety}, Neuheitsdrang: ${c.noveltyDrive}, Energie: ${c.energy}, Lebenszufriedenheit: ${c.lifeSatisfaction}${c.note ? ` (Notiz: "${c.note}")` : ''}`;
-      }).join('\n')
-    : 'Noch keine aktuellen Check-ins in der Datenbank erfasst.';
+  const planSummary = activePlan
+    ? `Version: ${activePlan.version}\nTitel: ${activePlan.title}\nGesamtziel: ${activePlan.overallGoal}\nZeitraum: ${activePlan.startedAt} bis ${activePlan.plannedEndAt || 'offen'}\nNächster formaler Review: ${activePlan.reviewDueAt || 'nicht gesetzt'}`
+    : 'Kein aktiver Therapieplan in der Datenbank.';
 
-  // Format Goals
+  const phaseSummary = activePhase
+    ? `Phase ${activePhase.phaseNumber}: ${activePhase.title} [${activePhase.status}]\nZiel: ${activePhase.objective}\nBeschreibung: ${activePhase.description}\nErfolgskriterien: ${JSON.stringify(activePhase.successCriteria || [])}`
+    : 'Keine aktive Therapiephase.';
+
+  const modulesSummary = activeModules.length > 0
+    ? activeModules.map((m, idx) => `${idx + 1}. [${m.status}] ${m.title} (${m.type}): ${m.description}`).join('\n')
+    : 'Keine Module für die aktuelle Phase hinterlegt.';
+
+  const planReviewSummary = latestPlanReview
+    ? `Letzter Review: ${latestPlanReview.progressSummary}\nNächster Review: ${latestPlanReview.nextReviewAt || 'offen'}`
+    : 'Noch kein formaler Therapieplan-Review; Plan v0.1 ist die aktuelle Ausgangsversion.';
+
+  const checkinSummary = checkins.length > 0
+    ? checkins.map((c) => `• ${c.date}: Stimmung ${c.mood}, Erfüllung ${c.fulfillment}, Einsamkeit ${c.loneliness}, Ruhe ${c.innerCalm}, Freude ${c.joy}, Grübeln ${c.rumination}, Zukunftsangst ${c.futureAnxiety}, Neuheit ${c.noveltyDrive}, Energie ${c.energy}, Lebenszufriedenheit ${c.lifeSatisfaction}${c.note ? ` — ${c.note}` : ''}`).join('\n')
+    : 'Noch keine aktuellen Check-ins.';
+
   const goalsSummary = goals.length > 0
     ? goals.map((g, idx) => `${idx + 1}. ${g.title}: ${g.description}`).join('\n')
     : 'Keine aktiven Ziele definiert.';
 
-  // Format Hypotheses with actual dynamic confidence
   const hypothesesSummary = activeHypotheses.length > 0
-    ? activeHypotheses.map((h) => {
-        const confPercent = Math.round(Number(h.confidence) * 100);
-        return `• [${h.id}] ${h.title} (Vertrauen: ${confPercent}%): ${h.description}`;
-      }).join('\n')
-    : 'Keine aktiven Hypothesen hinterlegt.';
+    ? activeHypotheses.map((h) => `• [${h.id}] ${h.title} (Arbeitsvertrauen ${Math.round(Number(h.confidence) * 100)}%): ${h.description}`).join('\n')
+    : 'Keine aktiven Arbeitshypothesen.';
 
-  // Format Active Experiment & Observations
   let experimentSummary = 'Kein aktives Experiment.';
   if (activeExp) {
-    experimentSummary = `Titel: ${activeExp.title}\n• Hypothese: ${activeExp.hypothesis}\n• Erwartete Vorhersage: ${activeExp.prediction}\n• Handlungsauftrag: ${activeExp.instructions || 'N/A'}\n• Laufzeit: ${activeExp.startDate} bis ${activeExp.endDate}`;
+    experimentSummary = `Titel: ${activeExp.title}\nHypothese: ${activeExp.hypothesis}\nVorhersage: ${activeExp.prediction}\nAuftrag: ${activeExp.instructions || 'N/A'}\nLaufzeit: ${activeExp.startDate} bis ${activeExp.endDate}`;
     if (observations.length > 0) {
-      experimentSummary += '\n• Bisherige Beobachtungen:\n' + observations.map((obs, idx) => {
-        return `  ${idx + 1}. Auslöser: "${obs.triggerSituation || 'Einsamkeitsimpuls'}" -> Stimmung: ${obs.moodBefore ?? '?'}->${obs.moodAfter ?? '?'}, Einsamkeit: ${obs.lonelinessBefore}->${obs.lonelinessAfter ?? '?'}, Connection-Bedarf: ${obs.connectionNeedBefore}->${obs.connectionNeedAfter ?? '?'}, Romantik/Frau: ${obs.romanticSexualNeedBefore}->${obs.romanticSexualNeedAfter ?? '?'}, Neuheit: ${obs.noveltyDriveBefore}->${obs.noveltyDriveAfter ?? '?'}. Handlung: "${obs.actionTaken || 'N/A'}". ${obs.note ? `Notiz: "${obs.note}"` : ''}`;
-      }).join('\n');
+      experimentSummary += '\nBeobachtungen:\n' + observations.map((obs, idx) =>
+        `${idx + 1}. Stimmung ${obs.moodBefore ?? '?'}→${obs.moodAfter ?? '?'}, Einsamkeit ${obs.lonelinessBefore}→${obs.lonelinessAfter ?? '?'}, Connection ${obs.connectionNeedBefore}→${obs.connectionNeedAfter ?? '?'}, romantisch/sexuell ${obs.romanticSexualNeedBefore}→${obs.romanticSexualNeedAfter ?? '?'}, Neuheit ${obs.noveltyDriveBefore}→${obs.noveltyDriveAfter ?? '?'}; Handlung: ${obs.actionTaken || 'N/A'}${obs.note ? `; Notiz: ${obs.note}` : ''}`
+      ).join('\n');
     } else {
-      experimentSummary += '\n• Noch keine Beobachtungen protokolliert.';
+      experimentSummary += '\nNoch keine realen Beobachtungen protokolliert.';
     }
   }
 
-  // Format Recent Situations
   const situationsSummary = recentSituations.length > 0
-    ? recentSituations.map((s, idx) => {
-        return `Situation ${idx + 1} (${s.title}):\n  • Ereignis: ${s.objectiveEvent}\n  • Erwartung: "${s.expectation || 'N/A'}" vs. Gefühl: "${s.actualFeeling || 'N/A'}"\n  • Automatischer Gedanke: "${s.automaticThoughts}"\n  • Reaktion: "${s.behaviorReaction}"\n  • Konsequenz (kurz/lang): "${s.shortTermConsequence || 'N/A'}" / "${s.longTermConsequence || 'N/A'}"`;
-      }).join('\n')
+    ? recentSituations.map((s, idx) => `Situation ${idx + 1} — ${s.title}:\n• Ereignis: ${s.objectiveEvent}\n• Erwartung: ${s.expectation || 'N/A'}\n• Gefühl: ${s.actualFeeling || 'N/A'}\n• Gedanke: ${s.automaticThoughts}\n• Reaktion: ${s.behaviorReaction}\n• Langfristige offene Frage/Folge: ${s.longTermConsequence || 'N/A'}`).join('\n')
     : 'Keine kürzlichen Situationsanalysen.';
 
-  // Format Session Summaries
   const sessionSummaryText = recentSummaries.length > 0
-    ? recentSummaries.map((sum, idx) => {
-        return `Sitzung ${idx + 1}:\n  • Hauptthema: ${sum.mainIssue}\n  • Erkenntnis: ${sum.keyInsight}\n  • Vereinbarte Hausaufgabe: ${sum.homework}`;
-      }).join('\n')
+    ? recentSummaries.map((sum, idx) => `Sitzung ${idx + 1}: Hauptthema ${sum.mainIssue}; Erkenntnis: ${sum.keyInsight || 'offen'}; Aufgabe: ${sum.homework || 'keine'}`).join('\n')
     : 'Keine früheren Sitzungszusammenfassungen.';
 
-  // Build Dynamic Prompt
   const systemPrompt = `
-Du bist "Meine KVT", ein hochkompetenter, evidenzbasierter KI-Therapie-Begleiter für einen einzelnen Patienten (${profile.displayName}, Zeitzone: ${profile.timezone}).
-Dein theoretischer Rahmen ist Kognitive Verhaltenstherapie (KVT/CBT), Akzeptanz- und Commitment-Therapie (ACT), Positive Affect Treatment (PAT / Belohnungsfokussierung) und Schematherapie.
+Du bist "Meine KVT", ein strukturierter KI-Therapie-Begleiter für einen einzelnen Patienten (${profile.displayName}, Zeitzone: ${profile.timezone}).
+Primärer Rahmen: Kognitive Verhaltenstherapie (KVT/CBT). Ergänzend werden ACT, Positive-Affect-/Reward-Arbeit, Schema- und interpersonelle/CBASP-orientierte Elemente ausschließlich plan- und phasenbezogen eingesetzt.
 
 ═══════════════════════════════════════════════════════════════
-AKTUELLER DYNAMISCHER PATIENTEN- UND DATENBANK-KONTEXT:
+1. AKTUELLER THERAPIEPLAN — STEUERUNGSRAHMEN
 ═══════════════════════════════════════════════════════════════
+${planSummary}
 
-1. AKTUELLE CHECK-IN VERLÄUFE (Letzte Tage aus DB):
+AKTUELLE PHASE:
+${phaseSummary}
+
+AKTUELLE PHASENMODULE:
+${modulesSummary}
+
+PLAN-REVIEW:
+${planReviewSummary}
+
+WICHTIGE PLANREGEL:
+- Arbeite grundsätzlich innerhalb der aktuellen Phase und ihrer Module.
+- Führe Interventionen späterer Phasen nicht routinemäßig vorzeitig ein.
+- Wenn neue Evidenz eine Planänderung nahelegt, benenne das als Vorschlag für einen Therapieplan-Review; ändere den Plan nicht stillschweigend.
+- Ein einzelnes Ereignis darf eine Arbeitshypothese unterstützen oder schwächen, aber nicht automatisch bestätigen.
+
+═══════════════════════════════════════════════════════════════
+2. AKTUELLE VERLAUFSDATEN
+═══════════════════════════════════════════════════════════════
+CHECK-INS:
 ${checkinSummary}
 
-2. THERAPIEZIELE (v0.1 aus DB):
+THERAPIEZIELE:
 ${goalsSummary}
 
-3. KLINISCHE FALLFORMULIERUNG (${currentFormulation?.version || 'v0.1'}):
-${currentFormulation?.summary || 'Erfolgsorientierter Patient mit hoher Stimulationsaffinität und Erwartungs-Erlebens-Diskrepanzen.'}
+FALLFORMULIERUNG (${currentFormulation?.version || 'keine Version'}):
+${currentFormulation?.summary || 'Noch keine Fallformulierung.'}
 
-4. AKTIVE ARBEITSHYPOTHESEN (aus DB):
+ARBEITSHYPOTHESEN:
 ${hypothesesSummary}
 
-5. AKTIVES VERHALTENSEXPERIMENT & BEOBACHTUNGEN (aus DB):
+AKTIVES EXPERIMENT:
 ${experimentSummary}
 
-6. JÜNGSTE SITUATIONSANALYSEN (aus DB):
+JÜNGSTE SITUATIONEN:
 ${situationsSummary}
 
-7. LETZTE SITZUNGSRÜCKBLICKE:
+LETZTE SITZUNGEN:
 ${sessionSummaryText}
 
 ═══════════════════════════════════════════════════════════════
-SITZUNGSMODUS: ${sessionType.toUpperCase()}
+3. SITZUNGSMODUS: ${sessionType.toUpperCase()}
 ═══════════════════════════════════════════════════════════════
-${
-  sessionType === 'weekly'
-    ? `• Wöchentliche Struktursitzung:
-       1. Begrüßung & Review der letzten Check-in-Werte und des aktiven Experiments.
-       2. Gemeinsame Agenda festlegen.
-       3. Gezielte KVT/PAT-Intervention zum Hauptthema (Kognitive Umstrukturierung, Wertebezug oder Affekt-Verstärkung).
-       4. Nächsten experimentellen Schritt / Beobachtungsauftrag vereinbaren.`
-    : sessionType === 'focused'
-    ? `• Fokussierte Themenanalyse: Gezielte sokratische Bearbeitung eines spezifischen Themas oder Musters.`
-    : `• Akute Kurzintervention: Schnelle, pragmatische Klärung eines akuten Impulses (z.B. Einsamkeit, Dating-Drang, Grübelschleife) in 5-10 Minuten.`
-}
+${sessionType === 'weekly'
+  ? `Wöchentliche Struktursitzung:\n1. Kurzer Safety-/Zustandscheck.\n2. Daten und Experiment seit letzter Sitzung reviewen.\n3. Gemeinsame Agenda.\n4. Eine Intervention passend zur aktuellen Phase.\n5. Höchstens einen primären experimentellen Schritt vereinbaren.\n6. Prüfen, ob ein Plan-Review nötig ist.`
+  : sessionType === 'focused'
+  ? 'Fokussierte Bearbeitung eines konkreten Themas mit Bezug zur aktuellen Phase. Wenn das Thema klar außerhalb der Phase liegt, zunächst begründen, ob eine Planabweichung sinnvoll ist.'
+  : 'Kurze pragmatische Klärung eines akuten Impulses. Keine neue große Therapieagenda eröffnen.'}
 
 ═══════════════════════════════════════════════════════════════
-THERAPEUTISCHE HALTUNG & KOMMUNIKATIONSREGELN:
+4. THERAPEUTISCHE HALTUNG
 ═══════════════════════════════════════════════════════════════
-- **Epistemische Bescheidenheit:** Behandle Interpretationen und Zusammenhänge strikt als *Arbeitshypothesen*, niemals als feststehende Tatsachen (z.B. „Wir testen aktuell die Hypothese...“ statt „Du tust das nur, um...“).
-- **Präzise & sokratisch:** Stelle jeweils 1–2 fokussierte Fragen. Vermeide ausschweifende Textwüsten.
-- **Kontextbezug:** Beziehe dich direkt auf die konkreten Daten (z.B. die tatsächlichen Werte aus den Check-ins oder das laufende Experiment 001).
-- **Deutsche Sprache:** Klar, empathisch, professionell auf Augenhöhe.
+- Epistemische Bescheidenheit: Fakten, Selbstbericht, Interpretation und Arbeitshypothese klar unterscheiden.
+- Präzise und sokratisch: jeweils 1–2 fokussierte Fragen statt Textwüsten.
+- Datenbezug: konkrete Check-ins, Situationen und Experimente nutzen.
+- Von Einsicht zu Verhalten: Analyse soll möglichst in Beobachtung, Experiment oder wertebezogene Handlung münden.
+- Keine automatischen medizinischen oder Persönlichkeitsdiagnosen.
+- Keine Medikamentenänderungen anweisen.
+- Nicht jedes Unwohlsein pathologisieren; normale Einsamkeit, Traurigkeit, sexuelle Bedürfnisse und Habituation dürfen normale menschliche Prozesse sein.
 `;
 
   return {
@@ -206,6 +263,9 @@ THERAPEUTISCHE HALTUNG & KOMMUNIKATIONSREGELN:
       activeHypothesesCount: activeHypotheses.length,
       activeExperiment: activeExp,
       observationsCount: observations.length,
+      activePlan,
+      activePhase,
+      activeModules,
     },
   };
 }
