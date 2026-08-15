@@ -4,28 +4,29 @@ import { useState, useEffect } from 'react';
 import {
   FlaskConical,
   Plus,
-  Clock,
   Sparkles,
   CheckCircle2,
   X,
   ArrowRight,
-  TrendingDown,
   Loader2,
-  Calendar,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react';
 
 interface Observation {
   id: string;
   observedAt: string;
   triggerSituation: string | null;
-  lonelinessBefore: number;
-  lonelinessAfter: number | null;
-  connectionNeedBefore: number;
-  connectionNeedAfter: number | null;
-  romanticSexualNeedBefore: number;
-  romanticSexualNeedAfter: number | null;
-  noveltyDriveBefore: number;
-  noveltyDriveAfter: number | null;
+  moodBefore: number | string | null;
+  moodAfter: number | string | null;
+  lonelinessBefore: number | string;
+  lonelinessAfter: number | string | null;
+  connectionNeedBefore: number | string;
+  connectionNeedAfter: number | string | null;
+  romanticSexualNeedBefore: number | string;
+  romanticSexualNeedAfter: number | string | null;
+  noveltyDriveBefore: number | string;
+  noveltyDriveAfter: number | string | null;
   actionTaken: string | null;
   note: string | null;
 }
@@ -51,14 +52,16 @@ export default function ExperimentsPage() {
 
   // Observation Form State
   const [triggerSituation, setTriggerSituation] = useState('');
-  const [lonelinessBefore, setLonelinessBefore] = useState(7);
-  const [lonelinessAfter, setLonelinessAfter] = useState(3);
-  const [connectionBefore, setConnectionBefore] = useState(8);
-  const [connectionAfter, setConnectionAfter] = useState(4);
-  const [romanticBefore, setRomanticBefore] = useState(7);
-  const [romanticAfter, setRomanticAfter] = useState(3);
-  const [noveltyBefore, setNoveltyBefore] = useState(6);
-  const [noveltyAfter, setNoveltyAfter] = useState(3);
+  const [moodBefore, setMoodBefore] = useState(5.0);
+  const [moodAfter, setMoodAfter] = useState(6.5);
+  const [lonelinessBefore, setLonelinessBefore] = useState(7.0);
+  const [lonelinessAfter, setLonelinessAfter] = useState(3.5);
+  const [connectionBefore, setConnectionBefore] = useState(8.0);
+  const [connectionAfter, setConnectionAfter] = useState(4.0);
+  const [romanticBefore, setRomanticBefore] = useState(7.0);
+  const [romanticAfter, setRomanticAfter] = useState(3.0);
+  const [noveltyBefore, setNoveltyBefore] = useState(6.5);
+  const [noveltyAfter, setNoveltyAfter] = useState(3.0);
   const [actionTaken, setActionTaken] = useState('');
   const [note, setNote] = useState('');
 
@@ -91,6 +94,8 @@ export default function ExperimentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           triggerSituation,
+          moodBefore,
+          moodAfter,
           lonelinessBefore,
           lonelinessAfter,
           connectionNeedBefore: connectionBefore,
@@ -202,11 +207,27 @@ export default function ExperimentsPage() {
                           <span className="font-semibold text-slate-200">
                             {obs.triggerSituation || 'Einsamkeitsimpuls'}
                           </span>
-                          <span>{new Date(obs.observedAt).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>
+                            {new Date(obs.observedAt).toLocaleDateString('de-DE', {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
                         </div>
 
                         {/* Rating Deltas Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
+                          <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                            <div className="text-[10px] text-slate-400">Stimmung</div>
+                            <div className="font-mono font-bold text-emerald-400 flex items-center justify-center gap-1 mt-0.5">
+                              <span>{obs.moodBefore ?? '?'}</span>
+                              <span>→</span>
+                              <span>{obs.moodAfter ?? '?'}</span>
+                            </div>
+                          </div>
+
                           <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
                             <div className="text-[10px] text-slate-400">Einsamkeit</div>
                             <div className="font-mono font-bold text-amber-400 flex items-center justify-center gap-1 mt-0.5">
@@ -247,6 +268,11 @@ export default function ExperimentsPage() {
                         {obs.actionTaken && (
                           <div className="text-[11px] text-slate-300 bg-slate-900/50 p-2 rounded-lg">
                             <strong>Durchgeführte Handlung:</strong> {obs.actionTaken}
+                          </div>
+                        )}
+                        {obs.note && (
+                          <div className="text-[11px] text-slate-400 italic">
+                            &ldquo;{obs.note}&rdquo;
                           </div>
                         )}
                       </div>
@@ -294,18 +320,55 @@ export default function ExperimentsPage() {
               <div className="space-y-3 p-3 bg-slate-950/60 rounded-xl border border-slate-800/60">
                 <div className="text-[11px] font-semibold text-slate-300">Ratings (0 bis 10) – Vorher vs. Nachher:</div>
 
+                {/* Mood Before / After */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Einsamkeit VORHER</span>
-                      <span className="font-mono text-amber-400">{lonelinessBefore}/10</span>
+                      <span>Stimmung VORHER</span>
+                      <span className="font-mono text-emerald-400">{moodBefore}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="10"
+                      step="0.5"
+                      value={moodBefore}
+                      onChange={(e) => setMoodBefore(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-slate-400">
+                      <span>Stimmung NACHHER</span>
+                      <span className="font-mono text-emerald-400">{moodAfter}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="10"
+                      step="0.5"
+                      value={moodAfter}
+                      onChange={(e) => setMoodAfter(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Loneliness Before / After */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-slate-400">
+                      <span>Einsamkeit VORHER</span>
+                      <span className="font-mono text-amber-400">{lonelinessBefore}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="10"
+                      step="0.5"
                       value={lonelinessBefore}
-                      onChange={(e) => setLonelinessBefore(parseInt(e.target.value))}
+                      onChange={(e) => setLonelinessBefore(parseFloat(e.target.value))}
                       className="w-full h-1.5 bg-slate-900 rounded-lg accent-amber-400 cursor-pointer"
                     />
                   </div>
@@ -313,31 +376,34 @@ export default function ExperimentsPage() {
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
                       <span>Einsamkeit NACHHER</span>
-                      <span className="font-mono text-emerald-400">{lonelinessAfter}/10</span>
+                      <span className="font-mono text-emerald-400">{lonelinessAfter}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="10"
+                      step="0.5"
                       value={lonelinessAfter}
-                      onChange={(e) => setLonelinessAfter(parseInt(e.target.value))}
+                      onChange={(e) => setLonelinessAfter(parseFloat(e.target.value))}
                       className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
                     />
                   </div>
                 </div>
 
+                {/* Connection Need Before / After */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
                       <span>Connection Need VOR</span>
-                      <span className="font-mono text-sky-400">{connectionBefore}/10</span>
+                      <span className="font-mono text-sky-400">{connectionBefore}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="10"
+                      step="0.5"
                       value={connectionBefore}
-                      onChange={(e) => setConnectionBefore(parseInt(e.target.value))}
+                      onChange={(e) => setConnectionBefore(parseFloat(e.target.value))}
                       className="w-full h-1.5 bg-slate-900 rounded-lg accent-sky-400 cursor-pointer"
                     />
                   </div>
@@ -345,31 +411,34 @@ export default function ExperimentsPage() {
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
                       <span>Connection Need NACH</span>
-                      <span className="font-mono text-emerald-400">{connectionAfter}/10</span>
+                      <span className="font-mono text-emerald-400">{connectionAfter}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="10"
+                      step="0.5"
                       value={connectionAfter}
-                      onChange={(e) => setConnectionAfter(parseInt(e.target.value))}
+                      onChange={(e) => setConnectionAfter(parseFloat(e.target.value))}
                       className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
                     />
                   </div>
                 </div>
 
+                {/* Romantic Need Before / After */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
                       <span>Romantik / Frau VOR</span>
-                      <span className="font-mono text-rose-400">{romanticBefore}/10</span>
+                      <span className="font-mono text-rose-400">{romanticBefore}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="10"
+                      step="0.5"
                       value={romanticBefore}
-                      onChange={(e) => setRomanticBefore(parseInt(e.target.value))}
+                      onChange={(e) => setRomanticBefore(parseFloat(e.target.value))}
                       className="w-full h-1.5 bg-slate-900 rounded-lg accent-rose-400 cursor-pointer"
                     />
                   </div>
@@ -377,31 +446,34 @@ export default function ExperimentsPage() {
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
                       <span>Romantik / Frau NACH</span>
-                      <span className="font-mono text-emerald-400">{romanticAfter}/10</span>
+                      <span className="font-mono text-emerald-400">{romanticAfter}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="10"
+                      step="0.5"
                       value={romanticAfter}
-                      onChange={(e) => setRomanticAfter(parseInt(e.target.value))}
+                      onChange={(e) => setRomanticAfter(parseFloat(e.target.value))}
                       className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
                     />
                   </div>
                 </div>
 
+                {/* Novelty Drive Before / After */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
                       <span>Neuheitsdrang VOR</span>
-                      <span className="font-mono text-purple-400">{noveltyBefore}/10</span>
+                      <span className="font-mono text-purple-400">{noveltyBefore}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="10"
+                      step="0.5"
                       value={noveltyBefore}
-                      onChange={(e) => setNoveltyBefore(parseInt(e.target.value))}
+                      onChange={(e) => setNoveltyBefore(parseFloat(e.target.value))}
                       className="w-full h-1.5 bg-slate-900 rounded-lg accent-purple-400 cursor-pointer"
                     />
                   </div>
@@ -409,14 +481,15 @@ export default function ExperimentsPage() {
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
                       <span>Neuheitsdrang NACH</span>
-                      <span className="font-mono text-emerald-400">{noveltyAfter}/10</span>
+                      <span className="font-mono text-emerald-400">{noveltyAfter}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="10"
+                      step="0.5"
                       value={noveltyAfter}
-                      onChange={(e) => setNoveltyAfter(parseInt(e.target.value))}
+                      onChange={(e) => setNoveltyAfter(parseFloat(e.target.value))}
                       className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
                     />
                   </div>
@@ -424,7 +497,7 @@ export default function ExperimentsPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Durchgeführte soziale Verbindung</label>
+                <label className="text-slate-300 font-medium">Durchgeführte Handlung</label>
                 <input
                   type="text"
                   required

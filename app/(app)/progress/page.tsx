@@ -1,12 +1,12 @@
 import { db } from '@/lib/db';
 import { dailyCheckins } from '@/lib/db/schema';
 import { desc } from 'drizzle-orm';
-import { TrendingUp, Activity, Sparkles, ArrowUpRight, ArrowDownRight, Compass } from 'lucide-react';
+import { TrendingUp, Activity, Sparkles, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 export const revalidate = 0;
 
 export default async function ProgressPage() {
-  const checkinList = await db.select().from(dailyCheckins).orderBy(desc(dailyCheckins.date)).limit(14);
+  const checkinList = await db.select().from(dailyCheckins).orderBy(desc(dailyCheckins.date)).limit(14).catch(() => []);
   const reversedList = [...checkinList].reverse();
 
   // Core metrics config
@@ -45,7 +45,8 @@ export default async function ProgressPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {metrics.slice(0, 6).map((m) => {
-            const latestVal = checkinList[0] ? (checkinList[0] as any)[m.key] : m.baseline;
+            const rawVal = checkinList[0] ? (checkinList[0] as any)[m.key] : m.baseline;
+            const latestVal = typeof rawVal === 'number' ? rawVal : parseFloat(rawVal || String(m.baseline));
             const diff = latestVal - m.baseline;
 
             return (
@@ -88,7 +89,8 @@ export default async function ProgressPage() {
                         reversedList.length > 1
                           ? reversedList.map((c, i) => {
                               const x = (i / (reversedList.length - 1)) * 100;
-                              const val = (c as any)[m.key] ?? m.baseline;
+                              const itemRaw = (c as any)[m.key];
+                              const val = typeof itemRaw === 'number' ? itemRaw : parseFloat(itemRaw || String(m.baseline));
                               const y = 30 - (val / 10) * 28;
                               return `${x},${y}`;
                             }).join(' ')

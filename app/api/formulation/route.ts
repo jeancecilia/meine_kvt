@@ -14,7 +14,7 @@ export async function GET() {
       hypotheses: hypothesisList,
       goals: goalsList,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to fetch formulation data:', error);
     return NextResponse.json({ error: 'Datenbankfehler' }, { status: 500 });
   }
@@ -26,6 +26,7 @@ export async function POST(request: Request) {
 
     if (body.type === 'goal') {
       const newGoal = await db.insert(therapyGoals).values({
+        id: body.id || `goal-${Date.now()}`,
         orderIndex: body.orderIndex || 1,
         title: body.title,
         description: body.description,
@@ -37,20 +38,21 @@ export async function POST(request: Request) {
 
     if (body.type === 'formulation') {
       const newFormulation = await db.insert(caseFormulations).values({
+        id: body.id || `form-${Date.now()}`,
         version: body.version || 'v0.2',
         summary: body.summary,
-        predisposingFactors: JSON.stringify(body.predisposingFactors || []),
-        triggeringFactors: JSON.stringify(body.triggeringFactors || []),
-        maintainingFactors: JSON.stringify(body.maintainingFactors || []),
-        protectiveFactors: JSON.stringify(body.protectiveFactors || []),
-        workingHypothesesIds: JSON.stringify(body.workingHypothesesIds || []),
-        reviewedAt: new Date().toISOString(),
+        predisposingFactors: body.predisposingFactors || [],
+        triggeringFactors: body.triggeringFactors || [],
+        maintainingFactors: body.maintainingFactors || [],
+        protectiveFactors: body.protectiveFactors || [],
+        workingHypothesesIds: body.workingHypothesesIds || [],
+        reviewedAt: new Date(),
       }).returning();
       return NextResponse.json(newFormulation[0]);
     }
 
     return NextResponse.json({ error: 'Unbekannter Typ' }, { status: 400 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to save formulation item:', error);
     return NextResponse.json({ error: 'Speichern fehlgeschlagen' }, { status: 500 });
   }

@@ -13,26 +13,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'SessionId erforderlich' }, { status: 400 });
     }
 
-    const messages = await db.select().from(therapyMessages).where(eq(therapyMessages.sessionId, sessionId)).orderBy(therapyMessages.createdAt);
+    const messages = await db
+      .select()
+      .from(therapyMessages)
+      .where(eq(therapyMessages.sessionId, sessionId))
+      .orderBy(therapyMessages.createdAt)
+      .catch(() => []);
 
+    // Neutral, hypothesis-aware fallback structure
     let summaryData = {
-      mainIssue: 'Einsamkeitsregulation und Impulsmuster nach Zielerreichung',
-      keyObservations: ['Diskrepanz zwischen Zielerreichung und Belohnungsnachhall', 'Gewöhnungseffekt wird als Mangel wahrgenommen'],
-      interventionUsed: 'KVT-Kognitionsprotokoll & PAT-Reward-Analyse',
-      keyInsight: 'Die Sehnsucht nach einer neuen Frau ist primär ein Versuch, das unangenehme Gefühl des Alleinseins kurzfristig zu betäuben.',
-      homework: 'Experiment 001 konsequent fortführen: Bei Einsamkeit >= 5/10 vor Dating-Apps 15-30 Min. mit einem Vertrauten telefonieren.',
-      followUpTopics: ['Auswertung der Vorher/Nachher-Ratings des Experiments', 'Umgang mit Gewöhnung in Beziehungen'],
+      mainIssue: 'Reflexion der aktuellen Verhaltensmuster und Impulsregulation',
+      keyObservations: [
+        'Zusammenhang zwischen Alltagsruhe, Einsamkeitserleben und Stimulationsbedürfnis reflektiert',
+        'Unterschied zwischen Erwartung und tatsächlichem Belohnungsnachhall betrachtet',
+      ],
+      interventionUsed: 'KVT-Kognitionsanalyse & Sokratischer Dialog',
+      keyInsight: 'Als Arbeitshypothese wird geprüft, inwieweit das Bedürfnis nach Neuheit eine Bewältigungsreaktion auf Alleinsein und emotionale Diskrepanzen darstellt.',
+      homework: 'Laufendes Verhaltensexperiment (Vorher/Nachher-Ratings) fortführen und nächste Situation im 5-Stufen-Schema erfassen.',
+      followUpTopics: [
+        'Auswertung der protokollierten Experiment-Beobachtungen',
+        'Überprüfung der Hypothesen-Konfidenz',
+      ],
     };
 
     if (openai && messages.length > 2) {
       const summaryPrompt = `
-Fasse diese Therapiesitzung strukturiert im JSON-Format zusammen:
+Du bist ein wissenschaftlicher KVT/ACT-Dokumentationsassistent. Fasse die folgende Sitzung im JSON-Format zusammen.
+WICHTIGE REGEL: Bewahre epistemische Bescheidenheit. Behandle Erkenntnisse als "Arbeitshypothesen zur empirischen Überprüfung", nicht als feststehende Tatsachen.
+
+JSON-Format:
 {
-  "mainIssue": "Kernproblem der Sitzung",
+  "mainIssue": "Prägnante Bezeichnung des Hauptthemas",
   "keyObservations": ["Beobachtung 1", "Beobachtung 2"],
-  "interventionUsed": "Verwendete KVT/ACT-Methode",
-  "keyInsight": "Wichtigste therapeutische Erkenntnis",
-  "homework": "Konkrete Aufgabe/Experiment für die Woche",
+  "interventionUsed": "Verwendete Methode (z.B. KVT-Kognitionsprotokoll, Sokratischer Dialog, ACT-Werte)",
+  "keyInsight": "Zentrale therapeutische Hypothese / Erkenntnis",
+  "homework": "Konkreter nächster experimenteller Schritt / Beobachtungsauftrag",
   "followUpTopics": ["Thema 1", "Thema 2"]
 }
 `;
@@ -49,25 +64,25 @@ Fasse diese Therapiesitzung strukturiert im JSON-Format zusammen:
       if (parsed.mainIssue) summaryData = parsed;
     }
 
-    // Save summary
+    // Save summary in PostgreSQL database
     const newSummary = await db.insert(sessionSummaries).values({
       sessionId,
       mainIssue: summaryData.mainIssue,
-      keyObservations: JSON.stringify(summaryData.keyObservations),
+      keyObservations: summaryData.keyObservations,
       interventionUsed: summaryData.interventionUsed,
       keyInsight: summaryData.keyInsight,
       homework: summaryData.homework,
-      followUpTopics: JSON.stringify(summaryData.followUpTopics),
+      followUpTopics: summaryData.followUpTopics,
     }).returning();
 
     // Mark session completed
     await db.update(therapySessions).set({
       status: 'completed',
-      endedAt: new Date().toISOString(),
-    }).where(eq(therapySessions.id, sessionId));
+      endedAt: new Date(),
+    }).where(eq(therapySessions.id, sessionId)).catch(() => {});
 
     return NextResponse.json(newSummary[0]);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Session summary error:', error);
     return NextResponse.json({ error: 'Zusammenfassung fehlgeschlagen' }, { status: 500 });
   }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { experiments, experimentObservations } from '@/lib/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { desc } from 'drizzle-orm';
 
 export async function GET() {
   try {
@@ -15,7 +15,7 @@ export async function GET() {
     }));
 
     return NextResponse.json(expWithObs);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to fetch experiments:', error);
     return NextResponse.json({ error: 'Datenbankfehler' }, { status: 500 });
   }
@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     const newExp = await db.insert(experiments).values({
+      id: body.id || `exp-${Date.now()}`,
       title: body.title,
       hypothesis: body.hypothesis,
       prediction: body.prediction,
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
     }).returning();
 
     return NextResponse.json(newExp[0]);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to save experiment:', error);
     return NextResponse.json({ error: 'Experiment konnte nicht gespeichert werden' }, { status: 500 });
   }
