@@ -8,7 +8,7 @@ const client = createClient({
 
 export const db = drizzle(client, { schema });
 
-// Auto-initialize SQLite tables
+// Auto-initialize SQLite tables & seed T0 Baseline data
 initTables();
 
 async function initTables() {
@@ -149,7 +149,105 @@ async function initTables() {
         created_at TEXT NOT NULL
       );
     `);
+
+    // Seed T0 Baseline if check-ins are empty
+    const checkinCount = await client.execute('SELECT COUNT(*) as count FROM daily_checkins');
+    if (Number(checkinCount.rows[0].count) === 0) {
+      await client.execute({
+        sql: `INSERT INTO daily_checkins (id, date, mood, fulfillment, loneliness, inner_calm, joy, rumination, future_anxiety, novelty_drive, energy, sleep_quality, note, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          't0-baseline-checkin',
+          '2026-08-15',
+          6, // Stimmung 5.5 -> 6
+          4, // Erfüllung 4
+          7, // Einsamkeit 7
+          5, // Innere Ruhe 5
+          4, // Freude 4
+          7, // Grübeln 6.5 -> 7
+          6, // Zukunftsangst 6
+          7, // Neuheitsdrang 7
+          6, // Energie 6
+          5, // Lebenszufriedenheit 5
+          'T0 Baseline Messung (Systematische Erfassung)',
+          new Date().toISOString()
+        ]
+      });
+    }
+
+    // Seed Active Experiment 001 if experiments are empty
+    const expCount = await client.execute('SELECT COUNT(*) as count FROM experiments');
+    if (Number(expCount.rows[0].count) === 0) {
+      await client.execute({
+        sql: `INSERT INTO experiments (id, title, hypothesis, prediction, instructions, start_date, end_date, status, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'exp-001',
+          'Experiment 001 – Connection vs. Novelty',
+          'Einsamkeitsimpulse führen zu vorschnellem Suchen nach neuen Kontakten / Stimulation statt echter sozialer Verbindung.',
+          'Ein 15-30 minütiges Gespräch mit einem Vertrauten reduziert Einsamkeit (7 -> <=4) und senkt den Impuls nach Dating-Stimulation.',
+          'Bei Einsamkeit >= 5/10: Vor Tinder/Neuheit 15-30 Min. Freund/Familie anrufen, danach 4 Ratings durchführen.',
+          '2026-08-15',
+          '2026-08-22',
+          'active',
+          new Date().toISOString()
+        ]
+      });
+    }
+
+    // Seed Clinical Hypotheses if hypotheses are empty
+    const hypCount = await client.execute('SELECT COUNT(*) as count FROM hypotheses');
+    if (Number(hypCount.rows[0].count) === 0) {
+      await client.execute({
+        sql: `INSERT INTO hypotheses (id, title, description, confidence, status, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'hyp-001',
+          'ADHD-related novelty/habituation pattern',
+          'Belohnungssystem reagiert stark auf Neuheit; Gewöhnung in Erlebnissen & Beziehungen wird fälschlich als Sinnverlust interpretiert.',
+          0.82,
+          'active',
+          new Date().toISOString(),
+          new Date().toISOString()
+        ]
+      });
+      await client.execute({
+        sql: `INSERT INTO hypotheses (id, title, description, confidence, status, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'hyp-002',
+          'Erwartungs-Erlebens-Diskrepanz & Selbstbeobachtungsschleife',
+          'Objektiver Erfolg (z.B. Masterabschluss) erzeugt nicht die erwartete Euphorie -> Selbstbeobachtung ("warum bin ich nicht glücklicher?") -> Grübeln.',
+          0.78,
+          'active',
+          new Date().toISOString(),
+          new Date().toISOString()
+        ]
+      });
+    }
+
+    // Seed Situation 001 if situations are empty
+    const sitCount = await client.execute('SELECT COUNT(*) as count FROM situations');
+    if (Number(sitCount.rows[0].count) === 0) {
+      await client.execute({
+        sql: `INSERT INTO situations (id, occurred_at, category, description, objective_situation, automatic_thoughts, short_term_consequence, long_term_consequence, ai_summary, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'sit-001',
+          new Date().toISOString(),
+          'Erfolg & Einsamkeit',
+          'Masterabschluss am Morgen bestanden. Kaum Euphorie („okay, abgehakt“). Nachmittags Mall, abends Tinder Bangkok Standortwechsel.',
+          'Mitteilung über bestandenes Masterstudium erhalten. Nachmittags Spaziergang in der Mall.',
+          'Eigentlich müsste ich glücklich sein. Scheiße, niemanden zum Reden. Soll ich einer alten Flamme schreiben?',
+          'Mall-Spaziergang, Tinder-Standort nach Bangkok geändert.',
+          'Erneutes Suchen nach Stimulation zur Überdeckung von Einsamkeit.',
+          'Situation 001: Diskrepanz zwischen Erwartung (Euphorie) und Erleben nach Masterabschluss, gefolgt von Stimulationssuche.',
+          new Date().toISOString()
+        ]
+      });
+    }
+
   } catch (err) {
-    console.error('LibSQL table creation error:', err);
+    console.error('LibSQL table creation & seed error:', err);
   }
 }

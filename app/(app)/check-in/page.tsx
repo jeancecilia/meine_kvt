@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Activity, CheckCircle, Sparkles, ArrowRight } from 'lucide-react';
+import { Activity, CheckCircle, ArrowRight } from 'lucide-react';
 
 interface DimensionConfig {
   key: string;
@@ -10,34 +10,105 @@ interface DimensionConfig {
   description: string;
   lowLabel: string;
   highLabel: string;
+  defaultValue: number;
 }
 
 const dimensions: DimensionConfig[] = [
-  { key: 'mood', label: 'Stimmung', description: 'Allgemeines emotionales Empfinden', lowLabel: 'Sehr gedrückt', highLabel: 'Sehr positiv' },
-  { key: 'fulfillment', label: 'Erfüllung', description: 'Gefühl von Sinn und Bedeutsamkeit', lowLabel: 'Leere / Sinnlosigkeit', highLabel: 'Tiefe Erfüllung' },
-  { key: 'loneliness', label: 'Einsamkeit', description: 'Empfundene soziale Isolation', lowLabel: 'Verbunden / Zugehörig', highLabel: 'Starke Einsamkeit' },
-  { key: 'innerCalm', label: 'Innere Ruhe', description: 'Gelassenheit vs. Anspannung', lowLabel: 'Starke Unruhe', highLabel: 'Völlige Gelassenheit' },
-  { key: 'joy', label: 'Freude', description: 'Fähigkeit, Positives zu genießen', lowLabel: 'Freudlos', highLabel: 'Starke Freude' },
-  { key: 'rumination', label: 'Grübeln', description: 'Gedankenschleifen und Ruminieren', lowLabel: 'Kein Grübeln', highLabel: 'Exzessives Grübeln' },
-  { key: 'futureAnxiety', label: 'Zukunftsangst', description: 'Sorgen bezüglich der Zukunft', lowLabel: 'Keine Sorgen', highLabel: 'Starke Angst' },
-  { key: 'noveltyDrive', label: 'Neuheitsdrang', description: 'Reizüberflutung / Kick-Suche', lowLabel: 'Ruhebedürfnis', highLabel: 'Starker Drang' },
-  { key: 'energy', label: 'Energie', description: 'Körperliches & meintales Energieniveau', lowLabel: 'Erschöpft', highLabel: 'Voller Energie' },
-  { key: 'sleepQuality', label: 'Schlafqualität', description: 'Erholung in der vergangenen Nacht', lowLabel: 'Sehr schlecht', highLabel: 'Ausgezeichnet' },
+  {
+    key: 'mood',
+    label: 'Stimmung / Wohlbefinden',
+    description: 'Allgemeines emotionales Empfinden',
+    lowLabel: '0 Sehr schlecht / niedergeschlagen',
+    highLabel: '10 Sehr gut / ausgeglichen',
+    defaultValue: 5.5,
+  },
+  {
+    key: 'fulfillment',
+    label: 'Erfüllung / Zufriedenheit',
+    description: 'Sinn und Wertgefühl im Alltag',
+    lowLabel: '0 Überhaupt nicht erfüllt',
+    highLabel: '10 Sehr erfüllt & zufrieden',
+    defaultValue: 4,
+  },
+  {
+    key: 'loneliness',
+    label: 'Einsamkeit',
+    description: 'Empfundene soziale Isolation',
+    lowLabel: '0 Gar nicht einsam',
+    highLabel: '10 Extrem einsam',
+    defaultValue: 7,
+  },
+  {
+    key: 'innerCalm',
+    label: 'Innere Ruhe',
+    description: 'Gelassenheit vs. Anspannung',
+    lowLabel: '0 Sehr unruhig / angespannt',
+    highLabel: '10 Vollkommen ruhig & gelassen',
+    defaultValue: 5,
+  },
+  {
+    key: 'joy',
+    label: 'Freude / Positiver Affekt',
+    description: 'Fähigkeit, Positives zu genießen',
+    lowLabel: '0 Keine Freude spürbar',
+    highLabel: '10 Sehr viel Freude',
+    defaultValue: 4,
+  },
+  {
+    key: 'rumination',
+    label: 'Grübeln',
+    description: 'Gedankenschleifen & Ruminieren',
+    lowLabel: '0 Kein Grübeln',
+    highLabel: '10 Extrem viel Grübeln',
+    defaultValue: 6.5,
+  },
+  {
+    key: 'futureAnxiety',
+    label: 'Zukunfts- / Existenzangst',
+    description: 'Sorgen bezüglich der Zukunft',
+    lowLabel: '0 Keinerlei Angst',
+    highLabel: '10 Extrem starke Angst',
+    defaultValue: 6,
+  },
+  {
+    key: 'noveltyDrive',
+    label: 'Neuheits- / Stimulationsdrang',
+    description: 'Kick-Suche & Reizbedürfnis',
+    lowLabel: '0 Kein Bedürfnis nach Neuem',
+    highLabel: '10 Extrem starker Drang',
+    defaultValue: 7,
+  },
+  {
+    key: 'energy',
+    label: 'Energie / Antrieb',
+    description: 'Körperliches & meintales Energieniveau',
+    lowLabel: '0 Völlig erschöpft',
+    highLabel: '10 Extrem energiegeladen',
+    defaultValue: 6,
+  },
+  {
+    key: 'sleepQuality',
+    label: 'Lebenszufriedenheit insgesamt',
+    description: 'Gesamtbeurteilung des Lebens',
+    lowLabel: '0 Sehr unzufrieden',
+    highLabel: '10 Sehr zufrieden',
+    defaultValue: 5,
+  },
 ];
 
 export default function CheckInPage() {
   const router = useRouter();
   const [values, setValues] = useState<Record<string, number>>({
-    mood: 5,
-    fulfillment: 5,
-    loneliness: 3,
+    mood: 5.5,
+    fulfillment: 4,
+    loneliness: 7,
     innerCalm: 5,
-    joy: 5,
-    rumination: 4,
-    futureAnxiety: 3,
-    noveltyDrive: 4,
-    energy: 5,
-    sleepQuality: 6,
+    joy: 4,
+    rumination: 6.5,
+    futureAnxiety: 6,
+    noveltyDrive: 7,
+    energy: 6,
+    sleepQuality: 5,
   });
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -89,10 +160,10 @@ export default function CheckInPage() {
         <div>
           <div className="flex items-center gap-2 text-teal-400 text-xs font-semibold uppercase tracking-wider mb-1">
             <Activity className="w-4 h-4" />
-            Tägliches Monitoring
+            Tägliches Monitoring & T0 Baseline
           </div>
           <h1 className="text-2xl font-bold text-slate-100">30-Sekunden Check-In</h1>
-          <p className="text-xs text-slate-400 mt-1">Bewerte deine aktuellen Empfindungen auf einer Skala von 0 bis 10.</p>
+          <p className="text-xs text-slate-400 mt-1">Eindeutige Endpunkte (0 bis 10) ohne Interpretationsfragen.</p>
         </div>
       </div>
 
@@ -115,17 +186,17 @@ export default function CheckInPage() {
                   </span>
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <input
                     type="range"
                     min="0"
                     max="10"
-                    step="1"
+                    step="0.5"
                     value={val}
-                    onChange={(e) => handleChange(dim.key, parseInt(e.target.value))}
+                    onChange={(e) => handleChange(dim.key, parseFloat(e.target.value))}
                     className="w-full h-2 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-teal-400"
                   />
-                  <div className="flex justify-between text-[10px] text-slate-500">
+                  <div className="flex justify-between text-[10px] font-medium text-slate-400">
                     <span>{dim.lowLabel}</span>
                     <span>{dim.highLabel}</span>
                   </div>
