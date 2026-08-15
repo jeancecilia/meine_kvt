@@ -11,21 +11,33 @@ export const patientProfile = sqliteTable('patient_profile', {
   updatedAt: text('updated_at').default(new Date().toISOString()).notNull(),
 });
 
-// Daily Check-ins (0-10 ratings across 10 dimensions)
+// Daily Check-ins (0.0-10.0 ratings across 10 core dimensions + distinct sleep quality & life satisfaction)
 export const dailyCheckins = sqliteTable('daily_checkins', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   date: text('date').notNull(),
-  mood: integer('mood').notNull(), // 0-10
-  fulfillment: integer('fulfillment').notNull(), // 0-10
-  loneliness: integer('loneliness').notNull(), // 0-10
-  innerCalm: integer('inner_calm').notNull(), // 0-10
-  joy: integer('joy').notNull(), // 0-10
-  rumination: integer('rumination').notNull(), // 0-10
-  futureAnxiety: integer('future_anxiety').notNull(), // 0-10
-  noveltyDrive: integer('novelty_drive').notNull(), // 0-10
-  energy: integer('energy').notNull(), // 0-10
-  sleepQuality: integer('sleep_quality').notNull(), // 0-10
+  mood: real('mood').notNull(), // 0.0-10.0 (e.g. 5.5)
+  fulfillment: real('fulfillment').notNull(), // 0.0-10.0 (e.g. 4.0)
+  loneliness: real('loneliness').notNull(), // 0.0-10.0 (e.g. 7.0)
+  innerCalm: real('inner_calm').notNull(), // 0.0-10.0 (e.g. 5.0)
+  joy: real('joy').notNull(), // 0.0-10.0 (e.g. 4.0)
+  rumination: real('rumination').notNull(), // 0.0-10.0 (e.g. 6.5)
+  futureAnxiety: real('future_anxiety').notNull(), // 0.0-10.0 (e.g. 6.0)
+  noveltyDrive: real('novelty_drive').notNull(), // 0.0-10.0 (e.g. 7.0)
+  energy: real('energy').notNull(), // 0.0-10.0 (e.g. 6.0)
+  sleepQuality: real('sleep_quality').notNull().default(6.0), // Separate sleep quality
+  lifeSatisfaction: real('life_satisfaction').notNull().default(5.0), // Separate life satisfaction (e.g. 5.0)
   note: text('note'),
+  createdAt: text('created_at').default(new Date().toISOString()).notNull(),
+});
+
+// Therapy Goals (Versioned Therapy Objectives)
+export const therapyGoals = sqliteTable('therapy_goals', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orderIndex: integer('order_index').notNull().default(1),
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  status: text('status').notNull().default('active'), // 'active' | 'achieved' | 'paused'
+  targetDate: text('target_date'),
   createdAt: text('created_at').default(new Date().toISOString()).notNull(),
 });
 
@@ -64,17 +76,21 @@ export const sessionSummaries = sqliteTable('session_summaries', {
   createdAt: text('created_at').default(new Date().toISOString()).notNull(),
 });
 
-// Situations (CBT Situation Logging)
+// Situations (Structured 5-Step CBT Situation Analysis)
 export const situations = sqliteTable('situations', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   occurredAt: text('occurred_at').default(new Date().toISOString()).notNull(),
+  title: text('title').notNull().default('Situation'),
   category: text('category').notNull().default('Other'),
-  description: text('description').notNull(),
-  objectiveSituation: text('objective_situation'),
-  automaticThoughts: text('automatic_thoughts'),
+  objectiveEvent: text('objective_event').notNull(),
+  expectation: text('expectation'),
+  actualFeeling: text('actual_feeling'),
+  emotionRatings: text('emotion_ratings', { mode: 'json' }).default('{}'), // e.g. {"loneliness": 7, "melancholy": 5}
+  automaticThoughts: text('automatic_thoughts').notNull(),
+  behaviorReaction: text('behavior_reaction').notNull(),
   shortTermConsequence: text('short_term_consequence'),
   longTermConsequence: text('long_term_consequence'),
-  aiSummary: text('ai_summary'),
+  aiAnalysis: text('ai_analysis'),
   createdAt: text('created_at').default(new Date().toISOString()).notNull(),
 });
 
@@ -117,25 +133,36 @@ export const experiments = sqliteTable('experiments', {
   createdAt: text('created_at').default(new Date().toISOString()).notNull(),
 });
 
-// Experiment Observations
+// Experiment Observations (Concrete Before vs After Ratings)
 export const experimentObservations = sqliteTable('experiment_observations', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   experimentId: text('experiment_id').references(() => experiments.id, { onDelete: 'cascade' }).notNull(),
   observedAt: text('observed_at').default(new Date().toISOString()).notNull(),
-  metrics: text('metrics', { mode: 'json' }).default('{}'),
+  triggerSituation: text('trigger_situation'),
+  lonelinessBefore: real('loneliness_before').notNull(),
+  lonelinessAfter: real('loneliness_after'),
+  connectionNeedBefore: real('connection_need_before').notNull(),
+  connectionNeedAfter: real('connection_need_after'),
+  romanticSexualNeedBefore: real('romantic_sexual_need_before').notNull(),
+  romanticSexualNeedAfter: real('romantic_sexual_need_after'),
+  noveltyDriveBefore: real('novelty_drive_before').notNull(),
+  noveltyDriveAfter: real('novelty_drive_after'),
+  actionTaken: text('action_taken'), // e.g. "15 Min mit Freund X telefoniert"
   note: text('note'),
   createdAt: text('created_at').default(new Date().toISOString()).notNull(),
 });
 
-// Case Formulations (Versioned)
+// Case Formulations (Versioned v0.1, v0.2...)
 export const caseFormulations = sqliteTable('case_formulations', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  version: integer('version').notNull(),
+  version: text('version').notNull(), // 'v0.1'
   summary: text('summary').notNull(),
-  historicalFactors: text('historical_factors', { mode: 'json' }).default('[]'),
+  predisposingFactors: text('predisposing_factors', { mode: 'json' }).default('[]'),
+  triggeringFactors: text('triggering_factors', { mode: 'json' }).default('[]'),
   maintainingFactors: text('maintaining_factors', { mode: 'json' }).default('[]'),
   protectiveFactors: text('protective_factors', { mode: 'json' }).default('[]'),
-  openQuestions: text('open_questions', { mode: 'json' }).default('[]'),
+  workingHypothesesIds: text('working_hypotheses_ids', { mode: 'json' }).default('[]'),
+  reviewedAt: text('reviewed_at').default(new Date().toISOString()),
   createdAt: text('created_at').default(new Date().toISOString()).notNull(),
 });
 

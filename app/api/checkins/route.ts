@@ -5,7 +5,7 @@ import { desc } from 'drizzle-orm';
 
 export async function GET() {
   try {
-    const list = await db.select().from(dailyCheckins).orderBy(desc(dailyCheckins.date)).limit(14);
+    const list = await db.select().from(dailyCheckins).orderBy(desc(dailyCheckins.date)).limit(30);
     return NextResponse.json(list);
   } catch (error) {
     console.error('Failed to fetch checkins:', error);
@@ -20,16 +20,17 @@ export async function POST(request: Request) {
 
     const newCheckin = await db.insert(dailyCheckins).values({
       date: today,
-      mood: Number(body.mood),
-      fulfillment: Number(body.fulfillment),
-      loneliness: Number(body.loneliness),
-      innerCalm: Number(body.innerCalm),
-      joy: Number(body.joy),
-      rumination: Number(body.rumination),
-      futureAnxiety: Number(body.futureAnxiety),
-      noveltyDrive: Number(body.noveltyDrive),
-      energy: Number(body.energy),
-      sleepQuality: Number(body.sleepQuality),
+      mood: parseFloat(body.mood),
+      fulfillment: parseFloat(body.fulfillment),
+      loneliness: parseFloat(body.loneliness),
+      innerCalm: parseFloat(body.innerCalm),
+      joy: parseFloat(body.joy),
+      rumination: parseFloat(body.rumination),
+      futureAnxiety: parseFloat(body.futureAnxiety),
+      noveltyDrive: parseFloat(body.noveltyDrive),
+      energy: parseFloat(body.energy),
+      sleepQuality: parseFloat(body.sleepQuality ?? 6.0),
+      lifeSatisfaction: parseFloat(body.lifeSatisfaction ?? body.sleepQuality ?? 5.0),
       note: body.note || null,
     }).returning();
 
