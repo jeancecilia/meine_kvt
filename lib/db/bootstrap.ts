@@ -235,7 +235,7 @@ export async function bootstrapDatabase(client: any) {
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS values (
+      CREATE TABLE IF NOT EXISTS "values" (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         domain TEXT NOT NULL,
         title TEXT NOT NULL,
@@ -267,14 +267,12 @@ export async function bootstrapDatabase(client: any) {
       );
     `;
 
-    // Migrate existing databases created before the treatment-plan layer.
     await client`ALTER TABLE therapy_goals ADD COLUMN IF NOT EXISTS treatment_plan_id TEXT REFERENCES treatment_plans(id) ON DELETE SET NULL`;
     await client`ALTER TABLE therapy_sessions ADD COLUMN IF NOT EXISTS treatment_plan_id TEXT REFERENCES treatment_plans(id) ON DELETE SET NULL`;
     await client`ALTER TABLE therapy_sessions ADD COLUMN IF NOT EXISTS treatment_phase_id TEXT REFERENCES treatment_phases(id) ON DELETE SET NULL`;
     await client`ALTER TABLE experiments ADD COLUMN IF NOT EXISTS treatment_plan_id TEXT REFERENCES treatment_plans(id) ON DELETE SET NULL`;
     await client`ALTER TABLE experiments ADD COLUMN IF NOT EXISTS treatment_phase_id TEXT REFERENCES treatment_phases(id) ON DELETE SET NULL`;
 
-    // T0 baseline is a historical measurement and must not move with deployment date.
     await client`
       INSERT INTO daily_checkins (
         date, mood, fulfillment, loneliness, inner_calm, joy, rumination,
