@@ -190,7 +190,7 @@ export default async function TreatmentPlanPage() {
             {reviews.map((review) => (
               <div key={review.id} className="border-t border-slate-800 pt-3 first:border-0 first:pt-0">
                 <div className="text-xs text-slate-200">{review.progressSummary}</div>
-                <div className="text-[11px] text-slate-500 mt-1">{new Date(review.reviewedAt).toLocaleDateString('de-DE')} · nächster Review {review.nextReviewAt || 'offen'}</div>
+                <div className="text-[11px] text-slate-500 mt-1">{review.reviewedAt.toLocaleDateString('de-DE')} · nächster Review {review.nextReviewAt || 'offen'}</div>
               </div>
             ))}
           </div>
