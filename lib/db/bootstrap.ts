@@ -265,7 +265,7 @@ export async function bootstrapDatabase(client: any) {
         response INTEGER NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
-    `;
+    `.simple();
 
     await client`ALTER TABLE therapy_goals ADD COLUMN IF NOT EXISTS treatment_plan_id TEXT REFERENCES treatment_plans(id) ON DELETE SET NULL`;
     await client`ALTER TABLE therapy_sessions ADD COLUMN IF NOT EXISTS treatment_plan_id TEXT REFERENCES treatment_plans(id) ON DELETE SET NULL`;

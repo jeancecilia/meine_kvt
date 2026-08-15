@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { db } from '@/lib/db';
+import { db, ensureDatabaseReady } from '@/lib/db';
 import { therapySessions, therapyMessages } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { buildTherapyContext } from '@/lib/therapy/context';
@@ -26,8 +26,10 @@ export async function POST(request: Request) {
       });
     }
 
-    // Build the treatment-plan aware context before creating a new session so the session
-    // can be linked to the exact plan and phase that guided it.
+    // Guarantee that the treatment-plan schema and v0.1 seeds exist before the
+    // therapy context or a new session tries to reference them.
+    await ensureDatabaseReady();
+
     const contextData = await buildTherapyContext(sessionType || 'weekly');
 
     let currentSessionId = sessionId;
@@ -101,6 +103,9 @@ export async function POST(request: Request) {
     });
   } catch (error: any) {
     console.error('Therapy chat error:', error);
-    return NextResponse.json({ error: 'Fehler im Therapie-Chat' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Fehler im Therapie-Chat', detail: error?.message || String(error) },
+      { status: 500 },
+    );
   }
 }
