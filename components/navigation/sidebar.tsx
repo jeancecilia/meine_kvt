@@ -15,10 +15,12 @@ import {
   Settings,
   LogOut,
   Sparkles,
+  Target,
 } from 'lucide-react';
 
 const navItems = [
   { label: 'Heute', href: '/dashboard', icon: Calendar },
+  { label: 'Therapieplan', href: '/treatment-plan', icon: Target },
   { label: 'Check-in', href: '/check-in', icon: Activity },
   { label: 'Therapie', href: '/therapy', icon: MessageSquare },
   { label: 'Situationen', href: '/situations', icon: AlertCircle },
