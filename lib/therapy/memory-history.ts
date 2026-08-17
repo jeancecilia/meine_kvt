@@ -46,6 +46,54 @@ async function ensureHistoryStorage(): Promise<void> {
   await client`CREATE INDEX IF NOT EXISTS hypothesis_revisions_hypothesis_idx ON hypothesis_revisions(hypothesis_id, recorded_at DESC)`;
 }
 
+async function syncFormulationVersions(): Promise<void> {
+  await ensureHistoryStorage();
+  const formulations = await client`
+    SELECT id, version, summary, created_at, reviewed_at
+    FROM case_formulations
+    ORDER BY created_at DESC
+  `;
+
+  for (let index = 0; index < formulations.length; index += 1) {
+    const formulation = formulations[index];
+    const current = index === 0;
+    await client`
+      INSERT INTO therapeutic_memories (
+        memory_key, memory_type, title, content, domains, importance, confidence,
+        status, occurred_at, source_type, source_id, source_label, updated_at
+      ) VALUES (
+        ${`formulation:${formulation.id}`},
+        'formulation',
+        ${`Fallformulierung ${formulation.version}`},
+        ${formulation.summary},
+        '["fallformulierung","verlauf"]'::jsonb,
+        ${current ? 0.98 : 0.75},
+        0.78,
+        ${current ? 'active' : 'superseded'},
+        COALESCE(${formulation.reviewed_at}, ${formulation.created_at}, NOW()),
+        'case_formulation',
+        ${formulation.id},
+        ${formulation.version},
+        NOW()
+      )
+      ON CONFLICT (memory_key) DO UPDATE SET
+        title = EXCLUDED.title,
+        content = EXCLUDED.content,
+        importance = EXCLUDED.importance,
+        status = EXCLUDED.status,
+        occurred_at = EXCLUDED.occurred_at,
+        source_label = EXCLUDED.source_label,
+        embedding = CASE
+          WHEN therapeutic_memories.content IS DISTINCT FROM EXCLUDED.content
+          THEN NULL ELSE therapeutic_memories.embedding END,
+        embedding_model = CASE
+          WHEN therapeutic_memories.content IS DISTINCT FROM EXCLUDED.content
+          THEN NULL ELSE therapeutic_memories.embedding_model END,
+        updated_at = NOW()
+    `;
+  }
+}
+
 export async function syncHypothesisHistory(): Promise<void> {
   await ensureHistoryStorage();
   const hypotheses = await client`
@@ -55,6 +103,48 @@ export async function syncHypothesisHistory(): Promise<void> {
   `;
 
   for (const hypothesis of hypotheses) {
+    const confidence = clamp01(hypothesis.confidence);
+    const currentStatus = hypothesis.status === 'active' ? 'active' : 'superseded';
+
+    // Keep the canonical/current memory in sync even when the Node process has
+    // been running since before a hypothesis was edited.
+    await client`
+      INSERT INTO therapeutic_memories (
+        memory_key, memory_type, title, content, domains, importance, confidence,
+        status, occurred_at, source_type, source_id, source_label, updated_at
+      ) VALUES (
+        ${`hypothesis:${hypothesis.id}`},
+        'hypothesis',
+        ${hypothesis.title},
+        ${hypothesis.description},
+        '["hypothese"]'::jsonb,
+        ${hypothesis.status === 'active' ? 0.83 : 0.55},
+        ${confidence},
+        ${currentStatus},
+        COALESCE(${hypothesis.updated_at}, NOW()),
+        'hypothesis',
+        ${hypothesis.id},
+        'Aktueller Arbeitshypothesen-Stand',
+        NOW()
+      )
+      ON CONFLICT (memory_key) DO UPDATE SET
+        title = EXCLUDED.title,
+        content = EXCLUDED.content,
+        importance = EXCLUDED.importance,
+        confidence = EXCLUDED.confidence,
+        status = EXCLUDED.status,
+        occurred_at = EXCLUDED.occurred_at,
+        embedding = CASE
+          WHEN therapeutic_memories.title IS DISTINCT FROM EXCLUDED.title
+            OR therapeutic_memories.content IS DISTINCT FROM EXCLUDED.content
+          THEN NULL ELSE therapeutic_memories.embedding END,
+        embedding_model = CASE
+          WHEN therapeutic_memories.title IS DISTINCT FROM EXCLUDED.title
+            OR therapeutic_memories.content IS DISTINCT FROM EXCLUDED.content
+          THEN NULL ELSE therapeutic_memories.embedding_model END,
+        updated_at = NOW()
+    `;
+
     const fingerprint = hash(JSON.stringify({
       title: hypothesis.title,
       description: hypothesis.description,
@@ -72,7 +162,7 @@ export async function syncHypothesisHistory(): Promise<void> {
         ${hypothesis.id},
         ${hypothesis.title},
         ${hypothesis.description},
-        ${clamp01(hypothesis.confidence)},
+        ${confidence},
         ${hypothesis.status},
         'hypothesis_state',
         ${hypothesis.id},
@@ -82,7 +172,8 @@ export async function syncHypothesisHistory(): Promise<void> {
       RETURNING id::text
     `;
 
-    // Only create a new history-memory when the actual hypothesis state changed.
+    // A history entry is only added when title/description/confidence/status
+    // actually changed; timestamps alone do not create fake revisions.
     if (!inserted.length) continue;
 
     await client`
@@ -93,10 +184,10 @@ export async function syncHypothesisHistory(): Promise<void> {
         ${`hypothesis-history:${revisionKey}`},
         'hypothesis_history',
         ${`Historischer Hypothesenstand: ${hypothesis.title}`},
-        ${`Beschreibung: ${hypothesis.description}\nDamals dokumentiertes Arbeitsvertrauen: ${Math.round(clamp01(hypothesis.confidence) * 100)}%. Status: ${hypothesis.status}.`},
+        ${`Beschreibung: ${hypothesis.description}\nDamals dokumentiertes Arbeitsvertrauen: ${Math.round(confidence * 100)}%. Status: ${hypothesis.status}.`},
         '["hypothese","verlauf"]'::jsonb,
         0.48,
-        ${clamp01(hypothesis.confidence)},
+        ${confidence},
         'active',
         COALESCE(${hypothesis.updated_at}, NOW()),
         'hypothesis_revision',
@@ -179,23 +270,21 @@ async function syncPhaseSnapshots(referenceDate: Date): Promise<void> {
     `;
 
     const insights = sessions.map((session) => session.key_insight).filter(Boolean) as string[];
-    const openQuestions = sessions
-      .flatMap((session) => asStringArray(session.follow_up_topics))
-      .slice(-8);
+    const openQuestions = sessions.flatMap((session) => asStringArray(session.follow_up_topics)).slice(-8);
     const trends = trend(checkins[0], checkins[checkins.length - 1]);
     const keyChanges = [...trends, ...insights.slice(-5)].slice(0, 10);
-    const stablePatterns = memories
-      .slice(0, 6)
-      .map((memory) => `${memory.title}: ${memory.content}`);
+    const stablePatterns = memories.slice(0, 6).map((memory) => `${memory.title}: ${memory.content}`);
     const sourceCount = sessions.length + checkins.length + memories.length;
 
-    const summaryParts = [
+    const summary = [
       `Phase ${phase.phase_number} – ${phase.title} (${phase.status}).`,
       `Therapeutisches Ziel: ${phase.objective}`,
-      sessions.length ? `${sessions.length} strukturierte Sitzung(en) in dieser Phase.` : 'Noch keine strukturierte Sitzung mit dieser Phase verknüpft.',
+      sessions.length
+        ? `${sessions.length} strukturierte Sitzung(en) in dieser Phase.`
+        : 'Noch keine strukturierte Sitzung mit dieser Phase verknüpft.',
       checkins.length ? `${checkins.length} Check-in(s) im Phasenzeitraum.` : 'Noch keine Check-ins im Phasenzeitraum.',
       insights.length ? `Jüngste Erkenntnis: ${insights[insights.length - 1]}` : null,
-    ].filter(Boolean);
+    ].filter(Boolean).join(' ');
 
     await client`
       INSERT INTO memory_consolidations (
@@ -208,7 +297,7 @@ async function syncPhaseSnapshots(referenceDate: Date): Promise<void> {
         ${start},
         ${end},
         ${`Phasen-Snapshot: Phase ${phase.phase_number} – ${phase.title}`},
-        ${summaryParts.join(' ')},
+        ${summary},
         ${JSON.stringify(keyChanges)}::jsonb,
         ${JSON.stringify(stablePatterns)}::jsonb,
         ${JSON.stringify(openQuestions)}::jsonb,
@@ -217,6 +306,7 @@ async function syncPhaseSnapshots(referenceDate: Date): Promise<void> {
         NOW()
       )
       ON CONFLICT (period_key) DO UPDATE SET
+        period_start = EXCLUDED.period_start,
         period_end = EXCLUDED.period_end,
         title = EXCLUDED.title,
         summary = EXCLUDED.summary,
@@ -231,6 +321,7 @@ async function syncPhaseSnapshots(referenceDate: Date): Promise<void> {
 }
 
 export async function syncLongitudinalHistory(referenceDate = new Date()): Promise<void> {
+  await syncFormulationVersions();
   await syncHypothesisHistory();
   await syncPhaseSnapshots(referenceDate);
 }
