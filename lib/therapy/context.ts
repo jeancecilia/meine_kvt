@@ -16,6 +16,7 @@ import {
   motiveChecks,
 } from '@/lib/db/schema';
 import { asc, desc, eq } from 'drizzle-orm';
+import { getRecentSocialExposureLogs } from '@/lib/therapy/social-exposures';
 
 export interface TherapyContextData {
   systemPrompt: string;
@@ -34,6 +35,10 @@ export interface TherapyContextData {
 export async function buildTherapyContext(sessionType: string = 'weekly'): Promise<TherapyContextData> {
   const profiles = await db.select().from(patientProfile).limit(1).catch(() => []);
   const profile = profiles[0] || { displayName: 'Patient', timezone: 'Europe/Berlin' };
+
+  // Ensure the cross-cutting social-exposure layer exists before loading the
+  // current formulation/modules. This may create formulation v0.2 from the new anamnesis.
+  const recentSocialExposures = await getRecentSocialExposureLogs(5).catch(() => []);
 
   // Master treatment plan must come before individual techniques.
   const plans = await db
@@ -187,8 +192,15 @@ export async function buildTherapyContext(sessionType: string = 'weekly'): Promi
   }
 
   const motiveChecksSummary = recentMotiveChecks.length > 0
-    ? recentMotiveChecks.map((mc, idx) => `${idx + 1}. [${mc.dominantMotive}] Libido: ${mc.libido}, Verbundenheit: ${mc.connection}, Einsamkeit: ${mc.loneliness}, Neuheit: ${mc.novelty}, Bestätigung: ${mc.validation}, Langeweile: ${mc.boredom} -> ${mc.feedbackMessage || ''}`).join('\n')
+    ? recentMotiveChecks.map((mc, idx) => `${idx + 1}. [${mc.dominantMotive}] Libido: ${mc.libido}, Verbundenheit: ${mc.connection}, Einsamkeit: ${mc.loneliness}, Neuheit: ${mc.novelty}, Bestätigung: ${mc.validation}, Dating: ${mc.datingIntent}, Langeweile: ${mc.boredom} -> ${mc.feedbackMessage || ''}`).join('\n')
     : 'Noch keine 10s-Motivchecks erfasst.';
+
+  const socialExposureSummary = recentSocialExposures.length > 0
+    ? recentSocialExposures.map((log: any, idx: number) => {
+        const purposes = Array.isArray(log.purposes) ? log.purposes.join(', ') : 'nicht angegeben';
+        return `${idx + 1}. Kontext: ${log.context || log.target_type}; Zweck(e): ${purposes}; soziale Angst ${log.social_anxiety_before}→${log.social_anxiety_after ?? '?'}, erwartete Ablehnung ${log.expected_rejection_before}, Vermeidungsimpuls ${log.avoidance_urge_before}, Ansprech-Druck ${log.pressure_to_approach_before}, Wahlfreiheit ${log.choice_freedom_before}→${log.choice_freedom_after ?? '?'}; durchgeführt: ${log.performed ? 'ja' : 'nein'}; Ergebnis: ${log.actual_outcome || 'offen'}${log.learning ? `; Learning: ${log.learning}` : ''}`;
+      }).join('\n')
+    : 'Noch keine strukturierten Social-Exposure-Logs. Anamnestisch berichtet: seit etwa einem Jahr bewusstes Aufsuchen sozialer Situationen und aktives Ansprechen mit subjektiv deutlichem Nutzen bei früheren Zügen sozialer Angst.';
 
   const situationsSummary = recentSituations.length > 0
     ? recentSituations.map((s, idx) => `Situation ${idx + 1} — ${s.title}:\n• Ereignis: ${s.objectiveEvent}\n• Erwartung: ${s.expectation || 'N/A'}\n• Gefühl: ${s.actualFeeling || 'N/A'}\n• Gedanke: ${s.automaticThoughts}\n• Reaktion: ${s.behaviorReaction}\n• Langfristige offene Frage/Folge: ${s.longTermConsequence || 'N/A'}`).join('\n')
@@ -234,8 +246,11 @@ ${hypothesesSummary}
 AKTIVES EXPERIMENT (Phase 1):
 ${experimentSummary}
 
-JÜNGSTE 10s-MOTIVCHECKS (Tinder/Dating-App Funktionsanalyse):
+JÜNGSTE 10s-MOTIVCHECKS (Dating-App Funktionsanalyse):
 ${motiveChecksSummary}
+
+SOZIALE EXPOSITION / REALES ANSPRECHEN:
+${socialExposureSummary}
 
 JÜNGSTE SITUATIONEN:
 ${situationsSummary}
@@ -247,18 +262,20 @@ ${sessionSummaryText}
 3. SITZUNGSMODUS: ${sessionType.toUpperCase()}
 ═══════════════════════════════════════════════════════════════
 ${sessionType === 'weekly'
-  ? `Wöchentliche Struktursitzung:\n1. Kurzer Safety-/Zustandscheck.\n2. Daten, Motivchecks und Experiment seit letzter Sitzung reviewen.\n3. Gemeinsame Agenda.\n4. Eine Intervention passend zur aktuellen Phase.\n5. Höchstens einen primären experimentellen Schritt vereinbaren.\n6. Prüfen, ob ein Plan-Review nötig ist.`
+  ? `Wöchentliche Struktursitzung:\n1. Kurzer Safety-/Zustandscheck.\n2. Daten, Motivchecks, Social-Exposure-Logs und Experiment seit letzter Sitzung reviewen.\n3. Gemeinsame Agenda.\n4. Eine Intervention passend zur aktuellen Phase.\n5. Höchstens einen primären experimentellen Schritt vereinbaren.\n6. Prüfen, ob ein Plan-Review nötig ist.`
   : sessionType === 'focused'
-  ? 'Fokussierte Bearbeitung eines konkreten Themas mit Bezug zur aktuellen Phase. Wenn das Thema klar außerhalb der Phase liegt, zunächst begründen, ob eine Planabweichung sinnvoll ist.'
+  ? 'Fokussierte Bearbeitung eines konkreten Themas mit Bezug zur aktuellen Phase. Bei sozialer Angst/Annäherungsverhalten die Social-Exposure-Daten nutzen und zwischen Angstüberwindung, freiwilliger sozialer Annäherung, Datinginteresse, Einsamkeit und selbst auferlegtem Leistungsdruck differenzieren.'
   : 'Kurze pragmatische Klärung eines akuten Impulses. Keine neue große Therapieagenda eröffnen.'}
 
 ═══════════════════════════════════════════════════════════════
 4. THERAPEUTISCHE HALTUNG
 ═══════════════════════════════════════════════════════════════
 - Epistemische Bescheidenheit: Fakten, Selbstbericht, Interpretation und Arbeitshypothese klar unterscheiden.
-- Funktionsanalyse vor Verhaltensbewertung: Dating-App-Impulse dienen distinkten Motiven (Sex/Libido, Verbundenheit, Einsamkeitsregulation, Neuheit/Thrill, Bestätigung, Langeweile). Echte sexuelle Motivation ist gesund und normal und wird niemals problematisiert oder als Pathologie behandelt!
+- Funktionsanalyse vor Verhaltensbewertung: Dating-App-Impulse dienen distinkten Motiven (Sex/Libido, Verbundenheit, Einsamkeitsregulation, Neuheit/Thrill, Bestätigung, echtes Datinginteresse, Langeweile). Echte sexuelle Motivation ist normal und wird nicht pathologisiert.
+- Reales Ansprechen von Menschen ist methodisch vom Dating-App-Impuls zu trennen. Aus dem Verhalten allein darf weder Einsamkeit noch Novelty-Seeking abgeleitet werden. Nach der Anamnese kann es teilweise bewusstes, adaptives Expositions-/Annäherungsverhalten bei früherer sozialer Angst sein.
+- Bei sozialer Exposition interessieren insbesondere konkrete Befürchtung, Angst, Vermeidungsimpuls, erwartete vs. tatsächliche Reaktion, Sicherheitsverhalten und Wahlfreiheit. Therapieziel ist nicht eine maximale Zahl angesprochener Menschen, sondern die Freiheit, anzusprechen oder es zu lassen, ohne dass Angst oder Leistungsdruck die Entscheidung übernimmt.
 - Präzise und sokratisch: jeweils 1–2 fokussierte Fragen statt Textwüsten.
-- Datenbezug: konkrete Check-ins, Situationen, Motiv-Checks und Experimente nutzen.
+- Datenbezug: konkrete Check-ins, Situationen, Motiv-Checks, Social-Exposure-Logs und Experimente nutzen.
 - Von Einsicht zu Verhalten: Analyse soll in Beobachtung, Experiment oder wertebezogene Handlung münden.
 - Keine automatischen medizinischen oder Persönlichkeitsdiagnosen.
 - Keine Medikamentenänderungen anweisen.
