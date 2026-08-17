@@ -5,6 +5,7 @@ import { therapySessions, therapyMessages } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { buildTherapyContext } from '@/lib/therapy/context';
 import { evaluateSafetyRisk } from '@/lib/therapy/safety';
+import { ensureFocusedSessionMemory20260817 } from '@/lib/therapy/focused-session-memory';
 
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
@@ -29,6 +30,11 @@ export async function POST(request: Request) {
     // Guarantee that the treatment-plan schema and v0.1 seeds exist before the
     // therapy context or a new session tries to reference them.
     await ensureDatabaseReady();
+
+    // Persist the structured learnings from the focused ChatGPT work on
+    // 2026-08-17 before generating any future therapy response. This also
+    // creates formulation v0.3 and the related working hypotheses idempotently.
+    await ensureFocusedSessionMemory20260817();
 
     const contextData = await buildTherapyContext(sessionType || 'weekly');
 
