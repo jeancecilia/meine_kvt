@@ -203,11 +203,32 @@ export const experimentObservations = pgTable('experiment_observations', {
   lonelinessAfter: numeric('loneliness_after', { precision: 3, scale: 1 }),
   connectionNeedBefore: numeric('connection_need_before', { precision: 3, scale: 1 }).notNull(),
   connectionNeedAfter: numeric('connection_need_after', { precision: 3, scale: 1 }),
+  libidoBefore: numeric('libido_before', { precision: 3, scale: 1 }),
+  libidoAfter: numeric('libido_after', { precision: 3, scale: 1 }),
   romanticSexualNeedBefore: numeric('romantic_sexual_need_before', { precision: 3, scale: 1 }).notNull(),
   romanticSexualNeedAfter: numeric('romantic_sexual_need_after', { precision: 3, scale: 1 }),
   noveltyDriveBefore: numeric('novelty_drive_before', { precision: 3, scale: 1 }).notNull(),
   noveltyDriveAfter: numeric('novelty_drive_after', { precision: 3, scale: 1 }),
   actionTaken: text('action_taken'),
+  note: text('note'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Dating-App / Tinder Motive Checks (10-Second Functional Snapshot)
+export const motiveChecks = pgTable('motive_checks', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  occurredAt: timestamp('occurred_at').defaultNow().notNull(),
+  appName: text('app_name').default('Tinder').notNull(),
+  libido: numeric('libido', { precision: 3, scale: 1 }).notNull(),
+  connection: numeric('connection', { precision: 3, scale: 1 }).notNull(),
+  loneliness: numeric('loneliness', { precision: 3, scale: 1 }).notNull(),
+  novelty: numeric('novelty', { precision: 3, scale: 1 }).notNull(),
+  validation: numeric('validation', { precision: 3, scale: 1 }).notNull(),
+  datingIntent: numeric('dating_intent', { precision: 3, scale: 1 }).notNull(),
+  boredom: numeric('boredom', { precision: 3, scale: 1 }).notNull(),
+  dominantMotive: text('dominant_motive').notNull(), // 'sexual' | 'connection_loneliness' | 'novelty_validation' | 'boredom' | 'mixed'
+  experimentTriggered: integer('experiment_triggered').notNull().default(0), // 0 or 1
+  feedbackMessage: text('feedback_message'),
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

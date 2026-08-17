@@ -60,7 +60,14 @@ export default async function DashboardPage() {
           <p className="text-xs text-slate-400 mt-1 capitalize">{currentDate}</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/experiments"
+            className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 hover:border-amber-400/50 text-amber-300 hover:text-amber-200 rounded-xl text-xs font-semibold transition-all shadow-sm"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>⚡ 10s Motivcheck</span>
+          </Link>
           <Link
             href="/check-in"
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
@@ -118,24 +125,24 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
                 <FlaskConical className="w-4 h-4" />
-                Aktives Experiment
+                Phase 1 Experiment
               </span>
               <span className="text-[11px] bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2.5 py-0.5 rounded-full font-medium">
                 {experimentDayText}
               </span>
             </div>
             <h3 className="font-bold text-slate-100 text-base">
-              {activeExp ? activeExp.title : 'Connection vs. Novelty'}
+              {activeExp ? activeExp.title : 'Motive Decomposition'}
             </h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              {activeExp?.prediction || 'Bei Einsamkeit vor Tinder 15-30 Min. mit einem Vertrauten sprechen.'}
+              {activeExp?.prediction || '10s Motivcheck: Bei Einsamkeit vor Tinder soziale Verbindung herstellen & Vorher/Nachher messen.'}
             </p>
           </div>
           <Link
             href="/experiments"
             className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-medium py-2 rounded-xl text-center transition-all block shadow-lg shadow-purple-900/20"
           >
-            Beobachtung hinzufügen
+            Experiment & 10s-Motivcheck
           </Link>
         </div>
 

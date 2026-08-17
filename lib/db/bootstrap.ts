@@ -265,6 +265,24 @@ export async function bootstrapDatabase(client: any) {
         response INTEGER NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS motive_checks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        occurred_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        app_name TEXT NOT NULL DEFAULT 'Tinder',
+        libido NUMERIC(3,1) NOT NULL,
+        connection NUMERIC(3,1) NOT NULL,
+        loneliness NUMERIC(3,1) NOT NULL,
+        novelty NUMERIC(3,1) NOT NULL,
+        validation NUMERIC(3,1) NOT NULL,
+        dating_intent NUMERIC(3,1) NOT NULL,
+        boredom NUMERIC(3,1) NOT NULL,
+        dominant_motive TEXT NOT NULL,
+        experiment_triggered INTEGER NOT NULL DEFAULT 0,
+        feedback_message TEXT,
+        note TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      );
     `.simple();
 
     await client`ALTER TABLE therapy_goals ADD COLUMN IF NOT EXISTS treatment_plan_id TEXT REFERENCES treatment_plans(id) ON DELETE SET NULL`;
@@ -272,6 +290,8 @@ export async function bootstrapDatabase(client: any) {
     await client`ALTER TABLE therapy_sessions ADD COLUMN IF NOT EXISTS treatment_phase_id TEXT REFERENCES treatment_phases(id) ON DELETE SET NULL`;
     await client`ALTER TABLE experiments ADD COLUMN IF NOT EXISTS treatment_plan_id TEXT REFERENCES treatment_plans(id) ON DELETE SET NULL`;
     await client`ALTER TABLE experiments ADD COLUMN IF NOT EXISTS treatment_phase_id TEXT REFERENCES treatment_phases(id) ON DELETE SET NULL`;
+    await client`ALTER TABLE experiment_observations ADD COLUMN IF NOT EXISTS libido_before NUMERIC(3,1)`;
+    await client`ALTER TABLE experiment_observations ADD COLUMN IF NOT EXISTS libido_after NUMERIC(3,1)`;
 
     await client`
       INSERT INTO daily_checkins (
@@ -452,12 +472,13 @@ export async function bootstrapDatabase(client: any) {
         id, treatment_plan_id, treatment_phase_id, title, hypothesis, prediction,
         instructions, start_date, end_date, status
       ) VALUES (
-        'exp-001', ${PLAN_ID}, ${PHASE_1_ID}, 'Experiment 001 – Connection vs. Novelty',
-        'Arbeitshypothese: Bei einem Teil der akuten Dating-/Kontaktsuchimpulse trägt Einsamkeit bzw. fehlende Verbundenheit relevant bei; romantisch-sexuelles Interesse und Neuheitsdrang können gleichzeitig eigenständig bestehen.',
-        'Wenn Verbundenheitsbedarf ein relevanter Treiber ist, sollte ein echtes 15–30-minütiges Gespräch Einsamkeit und den unmittelbaren Suchimpuls teilweise senken; romantisch-sexuelles Bedürfnis oder Neuheitsdrang können dabei weniger stark verändert bleiben.',
-        'Bei Einsamkeit >= 5/10: Stimmung, Einsamkeit, Verbundenheitsbedarf, romantisch-sexuelles Bedürfnis und Neuheitsdrang vorher bewerten; dann 15–30 Min. echte soziale Verbindung herstellen; dieselben Werte danach erneut erfassen. Danach ist Dating weiterhin erlaubt.',
+        'exp-001', ${PLAN_ID}, ${PHASE_1_ID}, 'Experiment 001 – Motive Decomposition (Connection vs. Libido vs. Novelty)',
+        'Dating-App-Impulse speisen sich aus distinkten Motiven (Sex/Libido, Verbundenheitsbedarf, Einsamkeitsregulation, Neuheit, Bestätigung). Durch gezielte soziale Verbindung lässt sich prüfen, welcher Anteil des Impulses auf Einsamkeit beruht, während echte Libido unbeeinträchtigt bleibt.',
+        'Bei Einsamkeit oder Verbundenheitsbedarf >= 5/10 senkt ein 15–30 Min. Gespräch Einsamkeit und den unmittelbaren Suchimpuls selektiv, während Libido/sexuelles Verlangen weitgehend stabil bleibt.',
+        'Bei Tinder-Impuls: 10s-Motivcheck durchführen. Wenn Einsamkeit oder Verbundenheit >= 5/10: Stimmung, Einsamkeit, Verbundenheit, Libido und Neuheitsdrang vorher bewerten; dann 15–30 Min. echte soziale Verbindung herstellen; dieselben Werte danach erneut erfassen. Danach ist Dating weiterhin uneingeschränkt erlaubt.',
         '2026-08-15', '2026-08-22', 'active'
       ) ON CONFLICT (id) DO UPDATE SET
+        title = EXCLUDED.title,
         treatment_plan_id = EXCLUDED.treatment_plan_id,
         treatment_phase_id = EXCLUDED.treatment_phase_id,
         hypothesis = EXCLUDED.hypothesis,

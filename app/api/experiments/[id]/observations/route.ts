@@ -20,8 +20,16 @@ export async function POST(
       lonelinessAfter: body.lonelinessAfter !== undefined && body.lonelinessAfter !== null ? String(body.lonelinessAfter) : null,
       connectionNeedBefore: String(body.connectionNeedBefore),
       connectionNeedAfter: body.connectionNeedAfter !== undefined && body.connectionNeedAfter !== null ? String(body.connectionNeedAfter) : null,
-      romanticSexualNeedBefore: String(body.romanticSexualNeedBefore),
-      romanticSexualNeedAfter: body.romanticSexualNeedAfter !== undefined && body.romanticSexualNeedAfter !== null ? String(body.romanticSexualNeedAfter) : null,
+      romanticSexualNeedBefore: String(body.romanticSexualNeedBefore ?? body.libidoBefore ?? 5),
+      romanticSexualNeedAfter: body.romanticSexualNeedAfter !== undefined && body.romanticSexualNeedAfter !== null 
+        ? String(body.romanticSexualNeedAfter) 
+        : (body.libidoAfter !== undefined && body.libidoAfter !== null ? String(body.libidoAfter) : null),
+      libidoBefore: body.libidoBefore !== undefined && body.libidoBefore !== null 
+        ? String(body.libidoBefore) 
+        : (body.romanticSexualNeedBefore !== undefined ? String(body.romanticSexualNeedBefore) : null),
+      libidoAfter: body.libidoAfter !== undefined && body.libidoAfter !== null 
+        ? String(body.libidoAfter) 
+        : (body.romanticSexualNeedAfter !== undefined ? String(body.romanticSexualNeedAfter) : null),
       noveltyDriveBefore: String(body.noveltyDriveBefore),
       noveltyDriveAfter: body.noveltyDriveAfter !== undefined && body.noveltyDriveAfter !== null ? String(body.noveltyDriveAfter) : null,
       actionTaken: body.actionTaken || null,

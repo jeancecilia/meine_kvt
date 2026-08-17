@@ -13,6 +13,7 @@ import {
   treatmentPhases,
   treatmentModules,
   treatmentPlanReviews,
+  motiveChecks,
 } from '@/lib/db/schema';
 import { asc, desc, eq } from 'drizzle-orm';
 
@@ -138,6 +139,13 @@ export async function buildTherapyContext(sessionType: string = 'weekly'): Promi
     .limit(3)
     .catch(() => []);
 
+  const recentMotiveChecks = await db
+    .select()
+    .from(motiveChecks)
+    .orderBy(desc(motiveChecks.occurredAt))
+    .limit(5)
+    .catch(() => []);
+
   const planSummary = activePlan
     ? `Version: ${activePlan.version}\nTitel: ${activePlan.title}\nGesamtziel: ${activePlan.overallGoal}\nZeitraum: ${activePlan.startedAt} bis ${activePlan.plannedEndAt || 'offen'}\nNächster formaler Review: ${activePlan.reviewDueAt || 'nicht gesetzt'}`
     : 'Kein aktiver Therapieplan in der Datenbank.';
@@ -171,12 +179,16 @@ export async function buildTherapyContext(sessionType: string = 'weekly'): Promi
     experimentSummary = `Titel: ${activeExp.title}\nHypothese: ${activeExp.hypothesis}\nVorhersage: ${activeExp.prediction}\nAuftrag: ${activeExp.instructions || 'N/A'}\nLaufzeit: ${activeExp.startDate} bis ${activeExp.endDate}`;
     if (observations.length > 0) {
       experimentSummary += '\nBeobachtungen:\n' + observations.map((obs, idx) =>
-        `${idx + 1}. Stimmung ${obs.moodBefore ?? '?'}→${obs.moodAfter ?? '?'}, Einsamkeit ${obs.lonelinessBefore}→${obs.lonelinessAfter ?? '?'}, Connection ${obs.connectionNeedBefore}→${obs.connectionNeedAfter ?? '?'}, romantisch/sexuell ${obs.romanticSexualNeedBefore}→${obs.romanticSexualNeedAfter ?? '?'}, Neuheit ${obs.noveltyDriveBefore}→${obs.noveltyDriveAfter ?? '?'}; Handlung: ${obs.actionTaken || 'N/A'}${obs.note ? `; Notiz: ${obs.note}` : ''}`
+        `${idx + 1}. Stimmung ${obs.moodBefore ?? '?'}→${obs.moodAfter ?? '?'}, Einsamkeit ${obs.lonelinessBefore}→${obs.lonelinessAfter ?? '?'}, Connection ${obs.connectionNeedBefore}→${obs.connectionNeedAfter ?? '?'}, Libido ${obs.libidoBefore ?? obs.romanticSexualNeedBefore}→${obs.libidoAfter ?? obs.romanticSexualNeedAfter ?? '?'}, Neuheit ${obs.noveltyDriveBefore}→${obs.noveltyDriveAfter ?? '?'}; Handlung: ${obs.actionTaken || 'N/A'}${obs.note ? `; Notiz: ${obs.note}` : ''}`
       ).join('\n');
     } else {
       experimentSummary += '\nNoch keine realen Beobachtungen protokolliert.';
     }
   }
+
+  const motiveChecksSummary = recentMotiveChecks.length > 0
+    ? recentMotiveChecks.map((mc, idx) => `${idx + 1}. [${mc.dominantMotive}] Libido: ${mc.libido}, Verbundenheit: ${mc.connection}, Einsamkeit: ${mc.loneliness}, Neuheit: ${mc.novelty}, Bestätigung: ${mc.validation}, Langeweile: ${mc.boredom} -> ${mc.feedbackMessage || ''}`).join('\n')
+    : 'Noch keine 10s-Motivchecks erfasst.';
 
   const situationsSummary = recentSituations.length > 0
     ? recentSituations.map((s, idx) => `Situation ${idx + 1} — ${s.title}:\n• Ereignis: ${s.objectiveEvent}\n• Erwartung: ${s.expectation || 'N/A'}\n• Gefühl: ${s.actualFeeling || 'N/A'}\n• Gedanke: ${s.automaticThoughts}\n• Reaktion: ${s.behaviorReaction}\n• Langfristige offene Frage/Folge: ${s.longTermConsequence || 'N/A'}`).join('\n')
@@ -198,22 +210,16 @@ ${planSummary}
 AKTUELLE PHASE:
 ${phaseSummary}
 
-AKTUELLE PHASENMODULE:
+MODULE DIESER PHASE:
 ${modulesSummary}
 
-PLAN-REVIEW:
+LETZTER FORMALER PLAN-REVIEW:
 ${planReviewSummary}
 
-WICHTIGE PLANREGEL:
-- Arbeite grundsätzlich innerhalb der aktuellen Phase und ihrer Module.
-- Führe Interventionen späterer Phasen nicht routinemäßig vorzeitig ein.
-- Wenn neue Evidenz eine Planänderung nahelegt, benenne das als Vorschlag für einen Therapieplan-Review; ändere den Plan nicht stillschweigend.
-- Ein einzelnes Ereignis darf eine Arbeitshypothese unterstützen oder schwächen, aber nicht automatisch bestätigen.
-
 ═══════════════════════════════════════════════════════════════
-2. AKTUELLE VERLAUFSDATEN
+2. KLINISCHE DATEN & VERLAUFSKONTEXT
 ═══════════════════════════════════════════════════════════════
-CHECK-INS:
+TÄGLICHE CHECK-INS (letzte Tage):
 ${checkinSummary}
 
 THERAPIEZIELE:
@@ -225,8 +231,11 @@ ${currentFormulation?.summary || 'Noch keine Fallformulierung.'}
 ARBEITSHYPOTHESEN:
 ${hypothesesSummary}
 
-AKTIVES EXPERIMENT:
+AKTIVES EXPERIMENT (Phase 1):
 ${experimentSummary}
+
+JÜNGSTE 10s-MOTIVCHECKS (Tinder/Dating-App Funktionsanalyse):
+${motiveChecksSummary}
 
 JÜNGSTE SITUATIONEN:
 ${situationsSummary}
@@ -238,7 +247,7 @@ ${sessionSummaryText}
 3. SITZUNGSMODUS: ${sessionType.toUpperCase()}
 ═══════════════════════════════════════════════════════════════
 ${sessionType === 'weekly'
-  ? `Wöchentliche Struktursitzung:\n1. Kurzer Safety-/Zustandscheck.\n2. Daten und Experiment seit letzter Sitzung reviewen.\n3. Gemeinsame Agenda.\n4. Eine Intervention passend zur aktuellen Phase.\n5. Höchstens einen primären experimentellen Schritt vereinbaren.\n6. Prüfen, ob ein Plan-Review nötig ist.`
+  ? `Wöchentliche Struktursitzung:\n1. Kurzer Safety-/Zustandscheck.\n2. Daten, Motivchecks und Experiment seit letzter Sitzung reviewen.\n3. Gemeinsame Agenda.\n4. Eine Intervention passend zur aktuellen Phase.\n5. Höchstens einen primären experimentellen Schritt vereinbaren.\n6. Prüfen, ob ein Plan-Review nötig ist.`
   : sessionType === 'focused'
   ? 'Fokussierte Bearbeitung eines konkreten Themas mit Bezug zur aktuellen Phase. Wenn das Thema klar außerhalb der Phase liegt, zunächst begründen, ob eine Planabweichung sinnvoll ist.'
   : 'Kurze pragmatische Klärung eines akuten Impulses. Keine neue große Therapieagenda eröffnen.'}
@@ -247,12 +256,12 @@ ${sessionType === 'weekly'
 4. THERAPEUTISCHE HALTUNG
 ═══════════════════════════════════════════════════════════════
 - Epistemische Bescheidenheit: Fakten, Selbstbericht, Interpretation und Arbeitshypothese klar unterscheiden.
+- Funktionsanalyse vor Verhaltensbewertung: Dating-App-Impulse dienen distinkten Motiven (Sex/Libido, Verbundenheit, Einsamkeitsregulation, Neuheit/Thrill, Bestätigung, Langeweile). Echte sexuelle Motivation ist gesund und normal und wird niemals problematisiert oder als Pathologie behandelt!
 - Präzise und sokratisch: jeweils 1–2 fokussierte Fragen statt Textwüsten.
-- Datenbezug: konkrete Check-ins, Situationen und Experimente nutzen.
-- Von Einsicht zu Verhalten: Analyse soll möglichst in Beobachtung, Experiment oder wertebezogene Handlung münden.
+- Datenbezug: konkrete Check-ins, Situationen, Motiv-Checks und Experimente nutzen.
+- Von Einsicht zu Verhalten: Analyse soll in Beobachtung, Experiment oder wertebezogene Handlung münden.
 - Keine automatischen medizinischen oder Persönlichkeitsdiagnosen.
 - Keine Medikamentenänderungen anweisen.
-- Nicht jedes Unwohlsein pathologisieren; normale Einsamkeit, Traurigkeit, sexuelle Bedürfnisse und Habituation dürfen normale menschliche Prozesse sein.
 `;
 
   return {

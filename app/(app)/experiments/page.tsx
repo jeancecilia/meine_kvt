@@ -11,7 +11,14 @@ import {
   Loader2,
   TrendingDown,
   TrendingUp,
+  Zap,
+  Flame,
+  HeartHandshake,
+  Award,
+  Clock,
+  HelpCircle,
 } from 'lucide-react';
+import { MotiveCheckModal } from '@/components/experiments/motive-check-modal';
 
 interface Observation {
   id: string;
@@ -23,6 +30,8 @@ interface Observation {
   lonelinessAfter: number | string | null;
   connectionNeedBefore: number | string;
   connectionNeedAfter: number | string | null;
+  libidoBefore?: number | string | null;
+  libidoAfter?: number | string | null;
   romanticSexualNeedBefore: number | string;
   romanticSexualNeedAfter: number | string | null;
   noveltyDriveBefore: number | string;
@@ -48,7 +57,14 @@ export default function ExperimentsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedExpId, setSelectedExpId] = useState<string | null>(null);
   const [showObsModal, setShowObsModal] = useState(false);
+  const [showMotiveModal, setShowMotiveModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Motive checks stats
+  const [motiveStats, setMotiveStats] = useState<{
+    totalCount: number;
+    distribution: Record<string, number>;
+  }>({ totalCount: 0, distribution: {} });
 
   // Observation Form State
   const [triggerSituation, setTriggerSituation] = useState('');
@@ -58,10 +74,10 @@ export default function ExperimentsPage() {
   const [lonelinessAfter, setLonelinessAfter] = useState(3.5);
   const [connectionBefore, setConnectionBefore] = useState(8.0);
   const [connectionAfter, setConnectionAfter] = useState(4.0);
-  const [romanticBefore, setRomanticBefore] = useState(7.0);
-  const [romanticAfter, setRomanticAfter] = useState(3.0);
+  const [libidoBefore, setLibidoBefore] = useState(7.0);
+  const [libidoAfter, setLibidoAfter] = useState(7.0);
   const [noveltyBefore, setNoveltyBefore] = useState(6.5);
-  const [noveltyAfter, setNoveltyAfter] = useState(3.0);
+  const [noveltyAfter, setNoveltyAfter] = useState(3.5);
   const [actionTaken, setActionTaken] = useState('');
   const [note, setNote] = useState('');
 
@@ -79,8 +95,24 @@ export default function ExperimentsPage() {
     }
   };
 
+  const fetchMotiveChecks = async () => {
+    try {
+      const res = await fetch('/api/motive-checks');
+      const data = await res.json();
+      if (data?.distribution) {
+        setMotiveStats({
+          totalCount: data.totalCount || 0,
+          distribution: data.distribution,
+        });
+      }
+    } catch {
+      console.error('Failed to load motive checks');
+    }
+  };
+
   useEffect(() => {
     fetchExperiments();
+    fetchMotiveChecks();
   }, []);
 
   const handleCreateObservation = async (e: React.FormEvent) => {
@@ -100,8 +132,10 @@ export default function ExperimentsPage() {
           lonelinessAfter,
           connectionNeedBefore: connectionBefore,
           connectionNeedAfter: connectionAfter,
-          romanticSexualNeedBefore: romanticBefore,
-          romanticSexualNeedAfter: romanticAfter,
+          libidoBefore,
+          libidoAfter,
+          romanticSexualNeedBefore: libidoBefore,
+          romanticSexualNeedAfter: libidoAfter,
           noveltyDriveBefore: noveltyBefore,
           noveltyDriveAfter: noveltyAfter,
           actionTaken,
@@ -109,7 +143,7 @@ export default function ExperimentsPage() {
         }),
       });
 
-      if (!res.ok) throw new Error('Speichern fehlgeschlagen');
+      if (!res.ok) throw new Error('Fehler beim Speichern der Beobachtung');
 
       setShowObsModal(false);
       // Reset form
@@ -117,120 +151,204 @@ export default function ExperimentsPage() {
       setActionTaken('');
       setNote('');
       fetchExperiments();
-    } catch {
-      alert('Fehler beim Speichern der Beobachtung');
+    } catch (err: any) {
+      alert(err.message || 'Fehler beim Speichern');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-800/80 pb-5">
+    <div className="space-y-8 max-w-5xl mx-auto pb-12">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
         <div>
           <div className="flex items-center gap-2 text-purple-400 text-xs font-semibold uppercase tracking-wider mb-1">
             <FlaskConical className="w-4 h-4" />
-            Verhaltensexperimente
+            Phase 1 • Verhaltensexperimente & Funktionsanalyse
           </div>
-          <h1 className="text-2xl font-bold text-slate-100">Aktive & Geplante Experimente</h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Empirische Überprüfung von Annahmen und Verhaltensmustern im Alltag.
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-100">
+            Verhaltensexperimente
+          </h1>
+          <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+            Systematisches Prüfen von KVT-Arbeitshypothesen durch gezielte Vorher/Nachher-Messungen und 10s-Motiv-Snapshots.
           </p>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setShowMotiveModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-bold rounded-xl text-xs shadow-lg shadow-amber-950/40 transition-all cursor-pointer"
+          >
+            <Zap className="w-4 h-4 fill-slate-950" />
+            <span>⚡ Tinder-Impuls? 10s-Motivcheck</span>
+          </button>
         </div>
       </div>
 
+      {/* Motive Decomposition Overview Card */}
+      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>10s-Motiv-Stichprobe (Phase 1 Monitoring)</span>
+          </div>
+          <div className="text-[11px] text-slate-400 font-mono">
+            Stichprobe: <strong className="text-amber-400">{motiveStats.totalCount}</strong> / 20 Impulse erfasst
+          </div>
+        </div>
+
+        {/* Motive Distribution Progress Bars */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+            <div className="flex items-center justify-between text-rose-400 font-medium mb-1">
+              <span className="flex items-center gap-1.5"><Flame className="w-3.5 h-3.5" /> Libido/Sex</span>
+              <span className="font-mono font-bold">{motiveStats.distribution.sexual || 0}</span>
+            </div>
+            <div className="text-[10px] text-slate-500">Kein Eingriff • Normaler Sex-Trieb</div>
+          </div>
+
+          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+            <div className="flex items-center justify-between text-purple-400 font-medium mb-1">
+              <span className="flex items-center gap-1.5"><FlaskConical className="w-3.5 h-3.5" /> Connection/Einsamkeit</span>
+              <span className="font-mono font-bold">{(motiveStats.distribution.connection_loneliness || 0) + (motiveStats.distribution.mixed || 0)}</span>
+            </div>
+            <div className="text-[10px] text-slate-500">Exp 001 Trigger • Vorher/Nachher</div>
+          </div>
+
+          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+            <div className="flex items-center justify-between text-amber-400 font-medium mb-1">
+              <span className="flex items-center gap-1.5"><Award className="w-3.5 h-3.5" /> Neuheit / Thrill</span>
+              <span className="font-mono font-bold">{motiveStats.distribution.novelty_validation || 0}</span>
+            </div>
+            <div className="text-[10px] text-slate-500">Evidenz für spätere Phasen</div>
+          </div>
+
+          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+            <div className="flex items-center justify-between text-slate-400 font-medium mb-1">
+              <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Langeweile</span>
+              <span className="font-mono font-bold">{motiveStats.distribution.boredom || 0}</span>
+            </div>
+            <div className="text-[10px] text-slate-500">Habit- / Dopamin-Ablenkung</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Experiments List */}
       {loading ? (
-        <div className="flex items-center justify-center py-20 text-slate-400 text-xs gap-2">
-          <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+        <div className="flex items-center justify-center p-12 text-slate-500">
+          <Loader2 className="w-6 h-6 animate-spin mr-2 text-purple-400" />
           <span>Lade Experimente...</span>
+        </div>
+      ) : experimentList.length === 0 ? (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 text-xs">
+          Keine aktiven Experimente gefunden.
         </div>
       ) : (
         <div className="space-y-6">
           {experimentList.map((exp) => (
-            <div key={exp.id} className="bg-slate-900/70 border border-slate-800/90 rounded-2xl p-6 space-y-6 shadow-xl">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold bg-purple-500/10 text-purple-300 border border-purple-500/20 px-3 py-1 rounded-lg flex items-center gap-1.5">
-                  <FlaskConical className="w-3.5 h-3.5 text-purple-400" />
-                  <span>{exp.title}</span>
-                </span>
-                <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-medium">
-                  {exp.status === 'active' ? 'Aktiv (Laufzeit 7 Tage)' : exp.status}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/60 space-y-1.5">
-                  <div className="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">Arbeitshypothese</div>
-                  <div className="text-slate-200 leading-relaxed">{exp.hypothesis}</div>
-                </div>
-
-                <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/60 space-y-1.5">
-                  <div className="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">Erwartete Vorhersage</div>
-                  <div className="text-slate-200 leading-relaxed">{exp.prediction}</div>
-                </div>
-              </div>
-
-              {exp.instructions && (
-                <div className="bg-purple-500/5 border border-purple-500/15 p-4 rounded-xl space-y-2 text-xs">
-                  <div className="font-semibold text-purple-300 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-purple-400" />
-                    <span>Konkreter Handlungsauftrag:</span>
+            <div
+              key={exp.id}
+              className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-sm"
+            >
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-slate-800/80 pb-5">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                      {exp.status === 'active' ? 'Aktiv' : exp.status}
+                    </span>
+                    <span className="text-xs text-slate-500 font-mono">
+                      {exp.startDate} bis {exp.endDate}
+                    </span>
                   </div>
-                  <p className="text-slate-300 leading-relaxed">{exp.instructions}</p>
+                  <h2 className="text-lg sm:text-xl font-bold text-slate-100">
+                    {exp.title}
+                  </h2>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setSelectedExpId(exp.id);
+                    setShowObsModal(true);
+                  }}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold rounded-xl text-xs transition-all shadow-md shadow-purple-900/20 shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Beobachtung erfassen</span>
+                </button>
+              </div>
+
+              {/* Hypothesis & Prediction Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 space-y-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                    <FlaskConical className="w-3.5 h-3.5" />
+                    Arbeitshypothese
+                  </span>
+                  <p className="text-slate-300 leading-relaxed">{exp.hypothesis}</p>
+                </div>
+
+                <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 space-y-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Konkrete Vorhersage
+                  </span>
+                  <p className="text-slate-300 leading-relaxed">{exp.prediction}</p>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              {exp.instructions && (
+                <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800/60 text-xs space-y-1">
+                  <span className="font-bold text-slate-300">Anleitung / Versuchsaufbau:</span>
+                  <p className="text-slate-400 leading-relaxed">{exp.instructions}</p>
                 </div>
               )}
 
-              {/* Logged Observations Section */}
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+              {/* Observations Section */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center justify-between text-xs">
+                  <h3 className="font-bold text-slate-200">
                     Protokollierte Beobachtungen ({exp.observations?.length || 0})
                   </h3>
-                  <button
-                    onClick={() => {
-                      setSelectedExpId(exp.id);
-                      setShowObsModal(true);
-                    }}
-                    className="flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-medium px-3.5 py-1.5 rounded-xl shadow-lg shadow-purple-900/20"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Beobachtung hinzufügen</span>
-                  </button>
                 </div>
 
                 {exp.observations && exp.observations.length > 0 ? (
                   <div className="space-y-3">
                     {exp.observations.map((obs) => (
-                      <div key={obs.id} className="bg-slate-950/70 border border-slate-800 p-4 rounded-xl space-y-3 text-xs">
-                        <div className="flex items-center justify-between text-[11px] text-slate-400">
-                          <span className="font-semibold text-slate-200">
-                            {obs.triggerSituation || 'Einsamkeitsimpuls'}
+                      <div
+                        key={obs.id}
+                        className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 space-y-3"
+                      >
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 border-b border-slate-900 pb-2">
+                          <span className="font-medium text-slate-300">
+                            {obs.triggerSituation || 'Akuter Impuls'}
                           </span>
-                          <span>
-                            {new Date(obs.observedAt).toLocaleDateString('de-DE', {
+                          <span className="font-mono">
+                            {new Date(obs.observedAt).toLocaleString('de-DE', {
                               day: '2-digit',
-                              month: 'short',
+                              month: '2-digit',
                               hour: '2-digit',
                               minute: '2-digit',
                             })}
                           </span>
                         </div>
 
-                        {/* Rating Deltas Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
+                        {/* 5-Dimension Before / After Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
                           <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
                             <div className="text-[10px] text-slate-400">Stimmung</div>
-                            <div className="font-mono font-bold text-emerald-400 flex items-center justify-center gap-1 mt-0.5">
+                            <div className="font-mono font-bold text-slate-200 flex items-center justify-center gap-1 mt-0.5">
                               <span>{obs.moodBefore ?? '?'}</span>
                               <span>→</span>
-                              <span>{obs.moodAfter ?? '?'}</span>
+                              <span className="text-emerald-400">{obs.moodAfter ?? '?'}</span>
                             </div>
                           </div>
 
                           <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
                             <div className="text-[10px] text-slate-400">Einsamkeit</div>
-                            <div className="font-mono font-bold text-amber-400 flex items-center justify-center gap-1 mt-0.5">
+                            <div className="font-mono font-bold text-indigo-400 flex items-center justify-center gap-1 mt-0.5">
                               <span>{obs.lonelinessBefore}</span>
                               <span>→</span>
                               <span className="text-emerald-400">{obs.lonelinessAfter ?? '?'}</span>
@@ -238,8 +356,8 @@ export default function ExperimentsPage() {
                           </div>
 
                           <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                            <div className="text-[10px] text-slate-400">Connection Need</div>
-                            <div className="font-mono font-bold text-sky-400 flex items-center justify-center gap-1 mt-0.5">
+                            <div className="text-[10px] text-slate-400">Verbundenheit</div>
+                            <div className="font-mono font-bold text-teal-400 flex items-center justify-center gap-1 mt-0.5">
                               <span>{obs.connectionNeedBefore}</span>
                               <span>→</span>
                               <span className="text-emerald-400">{obs.connectionNeedAfter ?? '?'}</span>
@@ -247,17 +365,17 @@ export default function ExperimentsPage() {
                           </div>
 
                           <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                            <div className="text-[10px] text-slate-400">Romantik/Frau</div>
+                            <div className="text-[10px] text-slate-400">Libido / Sex</div>
                             <div className="font-mono font-bold text-rose-400 flex items-center justify-center gap-1 mt-0.5">
-                              <span>{obs.romanticSexualNeedBefore}</span>
+                              <span>{obs.libidoBefore ?? obs.romanticSexualNeedBefore}</span>
                               <span>→</span>
-                              <span className="text-emerald-400">{obs.romanticSexualNeedAfter ?? '?'}</span>
+                              <span className="text-rose-400">{obs.libidoAfter ?? obs.romanticSexualNeedAfter ?? '?'}</span>
                             </div>
                           </div>
 
                           <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
                             <div className="text-[10px] text-slate-400">Neuheitsdrang</div>
-                            <div className="font-mono font-bold text-purple-400 flex items-center justify-center gap-1 mt-0.5">
+                            <div className="font-mono font-bold text-amber-400 flex items-center justify-center gap-1 mt-0.5">
                               <span>{obs.noveltyDriveBefore}</span>
                               <span>→</span>
                               <span className="text-emerald-400">{obs.noveltyDriveAfter ?? '?'}</span>
@@ -280,7 +398,7 @@ export default function ExperimentsPage() {
                   </div>
                 ) : (
                   <div className="bg-slate-950/40 p-4 rounded-xl text-center text-slate-500 text-xs">
-                    Noch keine Beobachtung eingetragen. Klicke auf „Beobachtung hinzufügen“, sobald du Einsamkeit bemerkst.
+                    Noch keine Beobachtung eingetragen. Bei einem Tinder-Impuls bitte zuerst den 10s-Motivcheck durchführen!
                   </div>
                 )}
               </div>
@@ -289,6 +407,19 @@ export default function ExperimentsPage() {
         </div>
       )}
 
+      {/* Motive Check Modal */}
+      <MotiveCheckModal
+        isOpen={showMotiveModal}
+        onClose={() => setShowMotiveModal(false)}
+        onSuccess={() => fetchMotiveChecks()}
+        onTriggerExperiment={() => {
+          if (experimentList.length > 0) {
+            setSelectedExpId(experimentList[0].id);
+            setShowObsModal(true);
+          }
+        }}
+      />
+
       {/* Observation Modal */}
       {showObsModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -296,7 +427,7 @@ export default function ExperimentsPage() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2 text-purple-400 text-xs font-semibold uppercase tracking-wider">
                 <FlaskConical className="w-4 h-4" />
-                <span>Experiment-Beobachtung erfassen</span>
+                <span>Experiment 001 Vorher/Nachher messen</span>
               </div>
               <button onClick={() => setShowObsModal(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
@@ -311,7 +442,7 @@ export default function ExperimentsPage() {
                   required
                   value={triggerSituation}
                   onChange={(e) => setTriggerSituation(e.target.value)}
-                  placeholder="z.B. Allein zu Hause, Impuls Tinder zu öffnen"
+                  placeholder="z.B. Allein zu Hause, Tinder-Impuls mit Einsamkeit >= 5"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-purple-500/50"
                 />
               </div>
@@ -360,7 +491,7 @@ export default function ExperimentsPage() {
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
                       <span>Einsamkeit VORHER</span>
-                      <span className="font-mono text-amber-400">{lonelinessBefore}</span>
+                      <span className="font-mono text-indigo-400">{lonelinessBefore}</span>
                     </div>
                     <input
                       type="range"
@@ -369,14 +500,14 @@ export default function ExperimentsPage() {
                       step="0.5"
                       value={lonelinessBefore}
                       onChange={(e) => setLonelinessBefore(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-amber-400 cursor-pointer"
+                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-indigo-400 cursor-pointer"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
                       <span>Einsamkeit NACHHER</span>
-                      <span className="font-mono text-emerald-400">{lonelinessAfter}</span>
+                      <span className="font-mono text-indigo-400">{lonelinessAfter}</span>
                     </div>
                     <input
                       type="range"
@@ -385,7 +516,7 @@ export default function ExperimentsPage() {
                       step="0.5"
                       value={lonelinessAfter}
                       onChange={(e) => setLonelinessAfter(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
+                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-indigo-400 cursor-pointer"
                     />
                   </div>
                 </div>
@@ -394,8 +525,8 @@ export default function ExperimentsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Connection Need VOR</span>
-                      <span className="font-mono text-sky-400">{connectionBefore}</span>
+                      <span>Verbundenheit VORHER</span>
+                      <span className="font-mono text-teal-400">{connectionBefore}</span>
                     </div>
                     <input
                       type="range"
@@ -404,14 +535,14 @@ export default function ExperimentsPage() {
                       step="0.5"
                       value={connectionBefore}
                       onChange={(e) => setConnectionBefore(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-sky-400 cursor-pointer"
+                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-teal-400 cursor-pointer"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Connection Need NACH</span>
-                      <span className="font-mono text-emerald-400">{connectionAfter}</span>
+                      <span>Verbundenheit NACHHER</span>
+                      <span className="font-mono text-teal-400">{connectionAfter}</span>
                     </div>
                     <input
                       type="range"
@@ -420,42 +551,42 @@ export default function ExperimentsPage() {
                       step="0.5"
                       value={connectionAfter}
                       onChange={(e) => setConnectionAfter(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
+                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-teal-400 cursor-pointer"
                     />
                   </div>
                 </div>
 
-                {/* Romantic Need Before / After */}
+                {/* Libido / Romantic Need Before / After */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Romantik / Frau VOR</span>
-                      <span className="font-mono text-rose-400">{romanticBefore}</span>
+                      <span>Libido / Sex VORHER</span>
+                      <span className="font-mono text-rose-400">{libidoBefore}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="10"
                       step="0.5"
-                      value={romanticBefore}
-                      onChange={(e) => setRomanticBefore(parseFloat(e.target.value))}
+                      value={libidoBefore}
+                      onChange={(e) => setLibidoBefore(parseFloat(e.target.value))}
                       className="w-full h-1.5 bg-slate-900 rounded-lg accent-rose-400 cursor-pointer"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Romantik / Frau NACH</span>
-                      <span className="font-mono text-emerald-400">{romanticAfter}</span>
+                      <span>Libido / Sex NACHHER</span>
+                      <span className="font-mono text-rose-400">{libidoAfter}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="10"
                       step="0.5"
-                      value={romanticAfter}
-                      onChange={(e) => setRomanticAfter(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
+                      value={libidoAfter}
+                      onChange={(e) => setLibidoAfter(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-rose-400 cursor-pointer"
                     />
                   </div>
                 </div>
@@ -464,8 +595,8 @@ export default function ExperimentsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Neuheitsdrang VOR</span>
-                      <span className="font-mono text-purple-400">{noveltyBefore}</span>
+                      <span>Neuheitsdrang VORHER</span>
+                      <span className="font-mono text-amber-400">{noveltyBefore}</span>
                     </div>
                     <input
                       type="range"
@@ -474,14 +605,14 @@ export default function ExperimentsPage() {
                       step="0.5"
                       value={noveltyBefore}
                       onChange={(e) => setNoveltyBefore(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-purple-400 cursor-pointer"
+                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-amber-400 cursor-pointer"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Neuheitsdrang NACH</span>
-                      <span className="font-mono text-emerald-400">{noveltyAfter}</span>
+                      <span>Neuheitsdrang NACHHER</span>
+                      <span className="font-mono text-amber-400">{noveltyAfter}</span>
                     </div>
                     <input
                       type="range"
@@ -490,17 +621,17 @@ export default function ExperimentsPage() {
                       step="0.5"
                       value={noveltyAfter}
                       onChange={(e) => setNoveltyAfter(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
+                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-amber-400 cursor-pointer"
                     />
                   </div>
                 </div>
               </div>
 
+              {/* Action & Note */}
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Durchgeführte Handlung</label>
+                <label className="text-slate-300 font-medium">Intervention / Durchführung</label>
                 <input
                   type="text"
-                  required
                   value={actionTaken}
                   onChange={(e) => setActionTaken(e.target.value)}
                   placeholder="z.B. 20 Min. mit gutem Freund telefoniert"
@@ -509,30 +640,30 @@ export default function ExperimentsPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Notiz / Erkenntnis (Optional)</label>
+                <label className="text-slate-300 font-medium">Erkenntnis / Notiz</label>
                 <textarea
                   rows={2}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Wie ging es dir danach? War danach noch Drang nach Tinder da?"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-100 outline-none focus:border-purple-500/50 resize-none"
+                  placeholder="z.B. Einsamkeit stark gesunken, Lust auf Date/Sex ist unverändert geblieben."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-purple-500/50 resize-none"
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className="pt-2 flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setShowObsModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium"
                 >
                   Abbrechen
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-5 py-2 rounded-xl font-medium shadow-lg shadow-purple-900/30 disabled:opacity-50"
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center gap-2"
                 >
-                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   <span>Beobachtung speichern</span>
                 </button>
               </div>
