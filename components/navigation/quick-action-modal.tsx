@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { X, Activity, MessageSquare, AlertCircle, Bookmark, Sparkles } from 'lucide-react';
+import { X, Activity, MessageSquare, AlertCircle, Bookmark, Sparkles, Users } from 'lucide-react';
 
 interface QuickActionModalProps {
   isOpen: boolean;
@@ -25,6 +25,13 @@ export function QuickActionModal({ isOpen, onClose }: QuickActionModalProps) {
       href: '/situations/new',
       icon: AlertCircle,
       color: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    },
+    {
+      label: 'Soziale Exposition protokollieren',
+      description: 'Angst, Vermeidung, reale Reaktion & Learning erfassen',
+      href: '/social-exposure',
+      icon: Users,
+      color: 'bg-sky-500/10 text-sky-400 border-sky-500/20',
     },
     {
       label: 'Therapie-Sitzung starten',
