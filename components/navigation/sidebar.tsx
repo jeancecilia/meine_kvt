@@ -16,6 +16,7 @@ import {
   LogOut,
   Sparkles,
   Target,
+  Search,
 } from 'lucide-react';
 
 const navItems = [
@@ -25,6 +26,7 @@ const navItems = [
   { label: 'Therapie', href: '/therapy', icon: MessageSquare },
   { label: 'Situationen', href: '/situations', icon: AlertCircle },
   { label: 'Experimente', href: '/experiments', icon: FlaskConical },
+  { label: 'Motivcheck', href: '/motive-check', icon: Search },
   { label: 'Werte', href: '/values', icon: Compass },
   { label: 'Tagebuch', href: '/journal', icon: BookOpen },
   { label: 'Fallformulierung', href: '/formulation', icon: FileText },
