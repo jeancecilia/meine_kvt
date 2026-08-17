@@ -79,9 +79,8 @@ export type MemoryConsolidation = {
 let storagePromise: Promise<void> | null = null;
 
 function clamp01(value: unknown, fallback: number): number {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.max(0, Math.min(1, number));
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : fallback;
 }
 
 function asStringArray(value: unknown): string[] {
@@ -96,10 +95,76 @@ function memoryText(title: string, content: string, domains: string[] = []): str
   return [title, content, domains.length ? `Themen: ${domains.join(', ')}` : ''].filter(Boolean).join('\n');
 }
 
+const DOMAIN_TERMS: Array<[string, string[]]> = [
+  ['beziehung', ['beziehung', 'partner', 'liebe', 'romant', 'dating', 'frau', 'intimit', 'einsam', 'sexuell', 'begehren']],
+  ['soziale-angst', ['soziale angst', 'ansprechen', 'ablehnung', 'exposition', 'feige', 'bedrohung', 'öffentlich', 'selbstsicher']],
+  ['depression', ['depress', 'melanchol', 'stimmung', 'anhedon', 'freude', 'glücklich', 'grübeln']],
+  ['adhs-reward', ['adhs', 'neuheit', 'novelty', 'belohn', 'habituation', 'stimulation', 'hyperfokus']],
+  ['sinn-erfuellung', ['sinn', 'erfüll', 'vollständig', 'werte', 'lebenszufriedenheit']],
+  ['arbeit-leistung', ['arbeit', 'karriere', 'master', 'leistung', 'zielerreich']],
+  ['sicherheit-aggression', ['gewalt', 'kampf', 'aggress', 'adrenalin', 'verteidigung', 'bedrohung']],
+];
+
+function inferDomains(text: string): string[] {
+  const normalized = text.toLowerCase();
+  return DOMAIN_TERMS
+    .filter(([, terms]) => terms.some((term) => normalized.includes(term)))
+    .map(([domain]) => domain);
+}
+
+function tokenize(text: string): Set<string> {
+  const stopwords = new Set([
+    'aber', 'auch', 'dass', 'dann', 'eine', 'einer', 'einem', 'einen', 'eines', 'für', 'hat', 'ich', 'ist', 'mit',
+    'nicht', 'oder', 'sich', 'sie', 'und', 'von', 'war', 'wie', 'wir', 'wird', 'zu', 'zum', 'zur', 'der', 'die', 'das',
+    'den', 'dem', 'des', 'ein', 'im', 'in', 'auf', 'es', 'als', 'am', 'an', 'was', 'wenn', 'mehr', 'sehr',
+  ]);
+  return new Set(
+    text
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .split(/[^a-z0-9äöüß]+/i)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3 && !stopwords.has(token)),
+  );
+}
+
+function lexicalSimilarity(query: string, memory: string): number {
+  const queryTokens = tokenize(query);
+  const memoryTokens = tokenize(memory);
+  if (!queryTokens.size || !memoryTokens.size) return 0;
+  let overlap = 0;
+  for (const token of queryTokens) if (memoryTokens.has(token)) overlap += 1;
+  return overlap / Math.sqrt(queryTokens.size * memoryTokens.size);
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (!a.length || a.length !== b.length) return 0;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    dot += a[index] * b[index];
+    normA += a[index] * a[index];
+    normB += b[index] * b[index];
+  }
+  return normA && normB ? dot / (Math.sqrt(normA) * Math.sqrt(normB)) : 0;
+}
+
+function recencyScore(value: unknown): number {
+  if (!value) return 0.25;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return 0.25;
+  const ageDays = Math.max(0, (Date.now() - date.getTime()) / 86_400_000);
+  return Math.exp(-ageDays / 365);
+}
+
 async function initializeStorage(): Promise<void> {
   await ensureDatabaseReady();
 
-  await client.unsafe(`
+  // Postgres.js requires the simple-query protocol for multiple SQL statements.
+  // This block contains no dynamic values and is safe to execute as one idempotent batch.
+  await client`
     CREATE TABLE IF NOT EXISTS therapeutic_memories (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       memory_key TEXT NOT NULL UNIQUE,
@@ -177,10 +242,8 @@ async function initializeStorage(): Promise<void> {
     CREATE INDEX IF NOT EXISTS therapeutic_memories_importance_idx ON therapeutic_memories(importance DESC);
     CREATE INDEX IF NOT EXISTS memory_sources_memory_idx ON memory_sources(memory_id);
     CREATE INDEX IF NOT EXISTS memory_consolidations_period_idx ON memory_consolidations(period_type, period_end DESC);
-  `);
+  `.simple();
 
-  // Explicit transcript correction from the focused session on 17 Aug. It must
-  // always outrank the erroneous fragment if that fragment appears elsewhere.
   await client`
     INSERT INTO memory_corrections (
       correction_key, incorrect_claim, corrected_claim, reason, source_type, source_id, status
@@ -211,37 +274,6 @@ export function ensureTherapeuticMemoryStorage(): Promise<void> {
     });
   }
   return storagePromise;
-}
-
-async function addMemorySource(
-  memoryId: string,
-  sourceType: string,
-  sourceId: string | null,
-  sourceExcerpt: string | null,
-  sourceDate?: Date | string | null,
-  metadata: Record<string, unknown> = {},
-): Promise<void> {
-  const existing = await client`
-    SELECT id FROM memory_sources
-    WHERE memory_id = ${memoryId}::uuid
-      AND source_type = ${sourceType}
-      AND COALESCE(source_id, '') = COALESCE(${sourceId}, '')
-      AND COALESCE(source_excerpt, '') = COALESCE(${sourceExcerpt}, '')
-    LIMIT 1
-  `;
-  if (existing.length > 0) return;
-
-  await client`
-    INSERT INTO memory_sources (memory_id, source_type, source_id, source_date, source_excerpt, metadata)
-    VALUES (
-      ${memoryId}::uuid,
-      ${sourceType},
-      ${sourceId},
-      ${sourceDate ? new Date(sourceDate) : null},
-      ${sourceExcerpt},
-      ${JSON.stringify(metadata)}::jsonb
-    )
-  `;
 }
 
 async function upsertMemory(input: {
@@ -305,6 +337,38 @@ async function upsertMemory(input: {
   return rows[0] as { id: string; memory_key: string };
 }
 
+async function addMemorySource(
+  memoryId: string,
+  sourceType: string,
+  sourceId: string | null,
+  sourceExcerpt: string | null,
+  sourceDate?: Date | string | null,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  const existing = await client`
+    SELECT id
+    FROM memory_sources
+    WHERE memory_id = ${memoryId}::uuid
+      AND source_type = ${sourceType}
+      AND COALESCE(source_id, '') = COALESCE(${sourceId}, '')
+      AND COALESCE(source_excerpt, '') = COALESCE(${sourceExcerpt}, '')
+    LIMIT 1
+  `;
+  if (existing.length) return;
+
+  await client`
+    INSERT INTO memory_sources (memory_id, source_type, source_id, source_date, source_excerpt, metadata)
+    VALUES (
+      ${memoryId}::uuid,
+      ${sourceType},
+      ${sourceId},
+      ${sourceDate ? new Date(sourceDate) : null},
+      ${sourceExcerpt},
+      ${JSON.stringify(metadata)}::jsonb
+    )
+  `;
+}
+
 async function backfillStructuredMemory(): Promise<void> {
   const summaries = await client`
     SELECT
@@ -312,7 +376,6 @@ async function backfillStructuredMemory(): Promise<void> {
       s.session_id::text AS session_id,
       s.main_issue,
       s.key_observations,
-      s.intervention_used,
       s.key_insight,
       s.homework,
       s.follow_up_topics,
@@ -371,12 +434,12 @@ async function backfillStructuredMemory(): Promise<void> {
     });
   }
 
-  const hypothesisRows = await client`
+  const hypotheses = await client`
     SELECT id, title, description, confidence, status, updated_at
     FROM hypotheses
     ORDER BY updated_at DESC
   `;
-  for (const row of hypothesisRows) {
+  for (const row of hypotheses) {
     await upsertMemory({
       memoryKey: `hypothesis:${row.id}`,
       memoryType: 'hypothesis',
@@ -394,68 +457,6 @@ async function backfillStructuredMemory(): Promise<void> {
   }
 }
 
-const DOMAIN_TERMS: Array<[string, string[]]> = [
-  ['beziehung', ['beziehung', 'partner', 'liebe', 'romant', 'dating', 'frau', 'intimit', 'einsam', 'sexuell', 'begehren']],
-  ['soziale-angst', ['soziale angst', 'ansprechen', 'ablehnung', 'exposition', 'feige', 'bedrohung', 'öffentlich', 'selbstsicher']],
-  ['depression', ['depress', 'melanchol', 'stimmung', 'anhedon', 'freude', 'glücklich', 'grübeln']],
-  ['adhs-reward', ['adhs', 'neuheit', 'novelty', 'belohn', 'habituation', 'stimulation', 'hyperfokus']],
-  ['sinn-erfuellung', ['sinn', 'erfüll', 'vollständig', 'werte', 'lebenszufriedenheit']],
-  ['arbeit-leistung', ['arbeit', 'karriere', 'master', 'leistung', 'zielerreich']],
-  ['sicherheit-aggression', ['gewalt', 'kampf', 'aggress', 'adrenalin', 'verteidigung', 'bedrohung']],
-];
-
-function inferDomains(text: string): string[] {
-  const normalized = text.toLowerCase();
-  return DOMAIN_TERMS
-    .filter(([, terms]) => terms.some((term) => normalized.includes(term)))
-    .map(([domain]) => domain);
-}
-
-function tokenize(text: string): Set<string> {
-  const stopwords = new Set([
-    'aber', 'auch', 'dass', 'dann', 'eine', 'einer', 'einem', 'einen', 'eines', 'für', 'hat', 'ich', 'ist', 'mit', 'nicht', 'oder', 'sich', 'sie', 'und', 'von', 'war', 'wie', 'wir', 'wird', 'zu', 'zum', 'zur', 'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'im', 'in', 'auf', 'es', 'als', 'am', 'an', 'was', 'wenn', 'mehr', 'sehr',
-  ]);
-  const tokens = text
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .split(/[^a-z0-9äöüß]+/i)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 3 && !stopwords.has(token));
-  return new Set(tokens);
-}
-
-function lexicalSimilarity(query: string, memory: string): number {
-  const q = tokenize(query);
-  const m = tokenize(memory);
-  if (!q.size || !m.size) return 0;
-  let overlap = 0;
-  for (const token of q) if (m.has(token)) overlap += 1;
-  return overlap / Math.sqrt(q.size * m.size);
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (!a.length || a.length !== b.length) return 0;
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let index = 0; index < a.length; index += 1) {
-    dot += a[index] * b[index];
-    normA += a[index] * a[index];
-    normB += b[index] * b[index];
-  }
-  if (!normA || !normB) return 0;
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
-
-function recencyScore(value: unknown): number {
-  if (!value) return 0.25;
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return 0.25;
-  const ageDays = Math.max(0, (Date.now() - date.getTime()) / 86_400_000);
-  return Math.exp(-ageDays / 365);
-}
-
 async function createEmbeddings(texts: string[]): Promise<number[][]> {
   if (!openai || texts.length === 0) return [];
   const response = await openai.embeddings.create({
@@ -467,21 +468,14 @@ async function createEmbeddings(texts: string[]): Promise<number[][]> {
   return response.data.map((item) => item.embedding);
 }
 
-async function embedMissingMemories(limit = 120): Promise<void> {
-  if (!openai) return;
-  const rows = await client`
-    SELECT id::text, title, content, domains
-    FROM therapeutic_memories
-    WHERE status = 'active' AND embedding IS NULL
-    ORDER BY importance DESC, COALESCE(occurred_at, created_at) DESC
-    LIMIT ${Math.max(1, Math.min(limit, 250))}
-  `;
-  if (!rows.length) return;
-
+async function embedRows(rows: any[]): Promise<void> {
+  if (!openai || rows.length === 0) return;
   try {
-    const embeddings = await createEmbeddings(rows.map((row) => memoryText(row.title, row.content, asStringArray(row.domains))));
+    const vectors = await createEmbeddings(
+      rows.map((row) => memoryText(row.title, row.content, asStringArray(row.domains))),
+    );
     for (let index = 0; index < rows.length; index += 1) {
-      const vector = embeddings[index];
+      const vector = vectors[index];
       if (!vector) continue;
       await client`
         UPDATE therapeutic_memories
@@ -492,33 +486,36 @@ async function embedMissingMemories(limit = 120): Promise<void> {
       `;
     }
   } catch (error: any) {
-    console.warn('Therapeutic memory embedding backfill skipped:', error?.message || error);
+    console.warn('Therapeutic memory embedding deferred:', error?.message || error);
   }
+}
+
+async function embedMissingMemories(limit = 120): Promise<void> {
+  if (!openai) return;
+  const rows = await client`
+    SELECT id::text, title, content, domains
+    FROM therapeutic_memories
+    WHERE status = 'active' AND embedding IS NULL
+    ORDER BY importance DESC, COALESCE(occurred_at, created_at) DESC
+    LIMIT ${Math.max(1, Math.min(limit, 250))}
+  `;
+  await embedRows(rows);
 }
 
 async function embedMemoryKeys(memoryKeys: string[]): Promise<void> {
   if (!openai || memoryKeys.length === 0) return;
-  const rows = await client`
-    SELECT id::text, memory_key, title, content, domains
-    FROM therapeutic_memories
-    WHERE memory_key = ANY(${memoryKeys}) AND status = 'active'
-  `;
-  if (!rows.length) return;
-  try {
-    const embeddings = await createEmbeddings(rows.map((row) => memoryText(row.title, row.content, asStringArray(row.domains))));
-    for (let index = 0; index < rows.length; index += 1) {
-      if (!embeddings[index]) continue;
-      await client`
-        UPDATE therapeutic_memories
-        SET embedding = ${JSON.stringify(embeddings[index])}::jsonb,
-            embedding_model = ${`${EMBEDDING_MODEL}:${EMBEDDING_DIMENSIONS}`},
-            updated_at = NOW()
-        WHERE id = ${rows[index].id}::uuid
-      `;
-    }
-  } catch (error: any) {
-    console.warn('New therapeutic memories stored without embeddings:', error?.message || error);
+  const uniqueKeys = Array.from(new Set(memoryKeys));
+  const rows: any[] = [];
+  for (const key of uniqueKeys) {
+    const found = await client`
+      SELECT id::text, title, content, domains
+      FROM therapeutic_memories
+      WHERE memory_key = ${key} AND status = 'active'
+      LIMIT 1
+    `;
+    if (found[0]) rows.push(found[0]);
   }
+  await embedRows(rows);
 }
 
 export async function ingestSessionSummaryMemory(input: SessionMemoryInput): Promise<void> {
@@ -554,30 +551,34 @@ export async function ingestSessionSummaryMemory(input: SessionMemoryInput): Pro
 
   for (const candidate of (input.memoryCandidates || []).slice(0, 8)) {
     if (!candidate?.title?.trim() || !candidate?.content?.trim()) continue;
-    const normalizedType = candidate.type === 'hypothesis'
+    const memoryType = candidate.type === 'hypothesis'
       ? 'hypothesis'
       : candidate.type === 'milestone'
-      ? 'milestone'
-      : 'semantic';
-    const candidateKey = `${normalizedType}:${hash(`${candidate.title.trim()}|${candidate.content.trim().toLowerCase()}`)}`;
+        ? 'milestone'
+        : 'semantic';
+    const candidateKey = `${memoryType}:${hash(`${candidate.title.trim()}|${candidate.content.trim().toLowerCase()}`)}`;
     const memory = await upsertMemory({
       memoryKey: candidateKey,
-      memoryType: normalizedType,
+      memoryType,
       title: candidate.title.trim(),
       content: candidate.content.trim(),
       domains: Array.from(new Set([...(candidate.domains || []), ...inferDomains(`${candidate.title} ${candidate.content}`)])),
-      importance: clamp01(candidate.importance, normalizedType === 'hypothesis' ? 0.62 : 0.76),
-      confidence: clamp01(candidate.confidence, normalizedType === 'hypothesis' ? 0.6 : 0.85),
+      importance: clamp01(candidate.importance, memoryType === 'hypothesis' ? 0.62 : 0.76),
+      confidence: clamp01(candidate.confidence, memoryType === 'hypothesis' ? 0.6 : 0.85),
       occurredAt,
       sourceType: 'session_summary',
       sourceId: input.summaryId,
       sourceLabel: input.mainIssue,
     });
     createdKeys.push(memory.memory_key);
-    await addMemorySource(memory.id, 'session_summary', input.summaryId, candidate.evidence || candidate.content, occurredAt, {
-      sessionId: input.sessionId,
-      memoryCandidateType: candidate.type || 'semantic',
-    });
+    await addMemorySource(
+      memory.id,
+      'session_summary',
+      input.summaryId,
+      candidate.evidence || candidate.content,
+      occurredAt,
+      { sessionId: input.sessionId, memoryCandidateType: candidate.type || 'semantic' },
+    );
   }
 
   for (const correction of (input.corrections || []).slice(0, 5)) {
@@ -606,107 +607,6 @@ export async function ingestSessionSummaryMemory(input: SessionMemoryInput): Pro
   }
 
   await embedMemoryKeys(createdKeys);
-}
-
-export async function retrieveTherapeuticMemory(query: string, limit = 8): Promise<{
-  core: RetrievedMemory[];
-  relevant: RetrievedMemory[];
-  corrections: MemoryCorrection[];
-  consolidations: MemoryConsolidation[];
-  mode: 'hybrid' | 'lexical';
-}> {
-  await ensureTherapeuticMemoryStorage();
-  await embedMissingMemories(120);
-
-  const correctionsRaw = await client`
-    SELECT correction_key, incorrect_claim, corrected_claim, reason, source_type, source_id
-    FROM memory_corrections
-    WHERE status = 'active'
-    ORDER BY updated_at DESC
-    LIMIT 30
-  `;
-  const corrections: MemoryCorrection[] = correctionsRaw.map((row) => ({
-    correctionKey: row.correction_key,
-    incorrectClaim: row.incorrect_claim,
-    correctedClaim: row.corrected_claim,
-    reason: row.reason,
-    sourceType: row.source_type,
-    sourceId: row.source_id,
-  }));
-
-  const coreRaw = await client`
-    SELECT memory_key, memory_type, title, content, domains, importance, confidence,
-           occurred_at, source_type, source_id, source_label
-    FROM therapeutic_memories
-    WHERE status = 'active'
-      AND memory_type IN ('semantic', 'milestone')
-      AND importance >= 0.80
-    ORDER BY importance DESC, COALESCE(occurred_at, created_at) DESC
-    LIMIT 10
-  `;
-  const core = coreRaw.map(mapRetrievedMemory);
-
-  const candidates = await client`
-    SELECT memory_key, memory_type, title, content, domains, importance, confidence,
-           occurred_at, source_type, source_id, source_label, embedding
-    FROM therapeutic_memories
-    WHERE status = 'active'
-    ORDER BY importance DESC, COALESCE(occurred_at, created_at) DESC
-    LIMIT 1500
-  `;
-
-  let queryEmbedding: number[] | null = null;
-  if (openai && query.trim()) {
-    try {
-      const result = await createEmbeddings([query.slice(0, 10_000)]);
-      queryEmbedding = result[0] || null;
-    } catch (error: any) {
-      console.warn('Semantic memory query embedding unavailable; lexical fallback used:', error?.message || error);
-    }
-  }
-
-  const mode: 'hybrid' | 'lexical' = queryEmbedding ? 'hybrid' : 'lexical';
-  const scored = candidates.map((row) => {
-    const domains = asStringArray(row.domains);
-    const text = memoryText(row.title, row.content, domains);
-    const lexical = lexicalSimilarity(query, text);
-    const importance = clamp01(row.importance, 0.5);
-    const recency = recencyScore(row.occurred_at);
-    const vector = Array.isArray(row.embedding) ? row.embedding.map(Number) : null;
-    const semantic = queryEmbedding && vector ? Math.max(0, cosineSimilarity(queryEmbedding, vector)) : 0;
-    const score = queryEmbedding
-      ? semantic * 0.7 + lexical * 0.15 + importance * 0.1 + recency * 0.05
-      : lexical * 0.62 + importance * 0.23 + recency * 0.15;
-    return { ...mapRetrievedMemory(row), score };
-  });
-
-  const coreKeys = new Set(core.map((memory) => memory.memoryKey));
-  const relevant = scored
-    .filter((memory) => !coreKeys.has(memory.memoryKey))
-    .sort((a, b) => (b.score || 0) - (a.score || 0))
-    .slice(0, Math.max(1, Math.min(limit, 15)));
-
-  const consolidationsRaw = await client`
-    SELECT period_key, period_type, period_start, period_end, title, summary,
-           key_changes, stable_patterns, open_questions, important_memory_keys,
-           source_count, updated_at
-    FROM memory_consolidations
-    ORDER BY period_end DESC, updated_at DESC
-    LIMIT 4
-  `;
-  const consolidations = consolidationsRaw.map(mapConsolidation);
-
-  await client`
-    INSERT INTO memory_retrieval_events (query, mode, selected_memory_keys, selected_correction_keys)
-    VALUES (
-      ${query || '[kein spezifisches Suchthema]'},
-      ${mode},
-      ${JSON.stringify([...core.map((item) => item.memoryKey), ...relevant.map((item) => item.memoryKey)])}::jsonb,
-      ${JSON.stringify(corrections.map((item) => item.correctionKey))}::jsonb
-    )
-  `.catch(() => []);
-
-  return { core, relevant, corrections, consolidations, mode };
 }
 
 function mapRetrievedMemory(row: any): RetrievedMemory {
@@ -742,19 +642,133 @@ function mapConsolidation(row: any): MemoryConsolidation {
   };
 }
 
-export function formatTherapeuticMemoryContext(memory: Awaited<ReturnType<typeof retrieveTherapeuticMemory>>): string {
+export async function retrieveTherapeuticMemory(query: string, limit = 8): Promise<{
+  core: RetrievedMemory[];
+  relevant: RetrievedMemory[];
+  corrections: MemoryCorrection[];
+  consolidations: MemoryConsolidation[];
+  mode: 'hybrid' | 'lexical';
+}> {
+  await ensureTherapeuticMemoryStorage();
+  await embedMissingMemories(120);
+
+  const correctionRows = await client`
+    SELECT correction_key, incorrect_claim, corrected_claim, reason, source_type, source_id
+    FROM memory_corrections
+    WHERE status = 'active'
+    ORDER BY updated_at DESC
+    LIMIT 30
+  `;
+  const corrections: MemoryCorrection[] = correctionRows.map((row) => ({
+    correctionKey: row.correction_key,
+    incorrectClaim: row.incorrect_claim,
+    correctedClaim: row.corrected_claim,
+    reason: row.reason,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
+  }));
+
+  const coreRows = await client`
+    SELECT memory_key, memory_type, title, content, domains, importance, confidence,
+           occurred_at, source_type, source_id, source_label
+    FROM therapeutic_memories
+    WHERE status = 'active'
+      AND memory_type IN ('semantic', 'milestone')
+      AND importance >= 0.80
+    ORDER BY importance DESC, COALESCE(occurred_at, created_at) DESC
+    LIMIT 10
+  `;
+  const core = coreRows.map(mapRetrievedMemory);
+
+  const candidates = await client`
+    SELECT memory_key, memory_type, title, content, domains, importance, confidence,
+           occurred_at, source_type, source_id, source_label, embedding
+    FROM therapeutic_memories
+    WHERE status = 'active'
+    ORDER BY importance DESC, COALESCE(occurred_at, created_at) DESC
+    LIMIT 1500
+  `;
+
+  let queryEmbedding: number[] | null = null;
+  if (openai && query.trim()) {
+    try {
+      queryEmbedding = (await createEmbeddings([query.slice(0, 10_000)]))[0] || null;
+    } catch (error: any) {
+      console.warn('Semantic memory retrieval unavailable; lexical fallback used:', error?.message || error);
+    }
+  }
+
+  const mode: 'hybrid' | 'lexical' = queryEmbedding ? 'hybrid' : 'lexical';
+  const scored = candidates.map((row) => {
+    const domains = asStringArray(row.domains);
+    const text = memoryText(row.title, row.content, domains);
+    const lexical = lexicalSimilarity(query, text);
+    const importance = clamp01(row.importance, 0.5);
+    const recency = recencyScore(row.occurred_at);
+    const storedVector = Array.isArray(row.embedding) ? row.embedding.map(Number) : null;
+    const semantic = queryEmbedding && storedVector
+      ? Math.max(0, cosineSimilarity(queryEmbedding, storedVector))
+      : 0;
+    const score = queryEmbedding
+      ? semantic * 0.7 + lexical * 0.15 + importance * 0.1 + recency * 0.05
+      : lexical * 0.62 + importance * 0.23 + recency * 0.15;
+    return { ...mapRetrievedMemory(row), score };
+  });
+
+  const coreKeys = new Set(core.map((item) => item.memoryKey));
+  const relevant = scored
+    .filter((item) => !coreKeys.has(item.memoryKey))
+    .sort((a, b) => (b.score || 0) - (a.score || 0))
+    .slice(0, Math.max(1, Math.min(limit, 15)));
+
+  const consolidationRows = await client`
+    SELECT period_key, period_type, period_start, period_end, title, summary,
+           key_changes, stable_patterns, open_questions, important_memory_keys,
+           source_count, updated_at
+    FROM memory_consolidations
+    ORDER BY period_end DESC, updated_at DESC
+    LIMIT 4
+  `;
+  const consolidations = consolidationRows.map(mapConsolidation);
+
+  await client`
+    INSERT INTO memory_retrieval_events (query, mode, selected_memory_keys, selected_correction_keys)
+    VALUES (
+      ${query || '[kein spezifisches Suchthema]'},
+      ${mode},
+      ${JSON.stringify([...core.map((item) => item.memoryKey), ...relevant.map((item) => item.memoryKey)])}::jsonb,
+      ${JSON.stringify(corrections.map((item) => item.correctionKey))}::jsonb
+    )
+  `.catch(() => []);
+
+  return { core, relevant, corrections, consolidations, mode };
+}
+
+export function formatTherapeuticMemoryContext(
+  memory: Awaited<ReturnType<typeof retrieveTherapeuticMemory>>,
+): string {
   const formatMemory = (item: RetrievedMemory) => {
-    const source = item.sourceLabel || (item.sourceType && item.sourceId ? `${item.sourceType}:${item.sourceId}` : item.sourceType) || 'strukturierte Erinnerung';
+    const source = item.sourceLabel
+      || (item.sourceType && item.sourceId ? `${item.sourceType}:${item.sourceId}` : item.sourceType)
+      || 'strukturierte Erinnerung';
     return `• [${item.memoryType}] ${item.title}: ${item.content}\n  Quelle: ${source}; Konfidenz ${Math.round(item.confidence * 100)}%; Wichtigkeit ${Math.round(item.importance * 100)}%`;
   };
 
   const correctionText = memory.corrections.length
-    ? memory.corrections.map((item) => `• NICHT VERWENDEN: „${item.incorrectClaim}“ → KORREKTUR: ${item.correctedClaim}${item.reason ? ` (${item.reason})` : ''}`).join('\n')
+    ? memory.corrections
+      .map((item) => `• NICHT VERWENDEN: „${item.incorrectClaim}“ → KORREKTUR: ${item.correctedClaim}${item.reason ? ` (${item.reason})` : ''}`)
+      .join('\n')
     : 'Keine aktiven Korrekturen.';
-  const coreText = memory.core.length ? memory.core.map(formatMemory).join('\n') : 'Noch keine stabilen semantischen Langzeiterinnerungen.';
-  const relevantText = memory.relevant.length ? memory.relevant.map(formatMemory).join('\n') : 'Keine älteren Erinnerungen mit ausreichender thematischer Relevanz gefunden.';
+  const coreText = memory.core.length
+    ? memory.core.map(formatMemory).join('\n')
+    : 'Noch keine stabilen semantischen Langzeiterinnerungen.';
+  const relevantText = memory.relevant.length
+    ? memory.relevant.map(formatMemory).join('\n')
+    : 'Keine älteren Erinnerungen mit ausreichender thematischer Relevanz gefunden.';
   const consolidationText = memory.consolidations.length
-    ? memory.consolidations.map((item) => `• ${item.title} (${item.periodStart}–${item.periodEnd}): ${item.summary}\n  Veränderungen: ${item.keyChanges.join(' | ') || 'keine'}\n  Offene Fragen: ${item.openQuestions.join(' | ') || 'keine'}`).join('\n')
+    ? memory.consolidations
+      .map((item) => `• ${item.title} (${item.periodStart}–${item.periodEnd}): ${item.summary}\n  Veränderungen: ${item.keyChanges.join(' | ') || 'keine'}\n  Offene Fragen: ${item.openQuestions.join(' | ') || 'keine'}`)
+      .join('\n')
     : 'Noch keine Wochen-/Monatskonsolidierungen vorhanden.';
 
   return `
@@ -788,14 +802,13 @@ function dateStringInTimezone(date: Date, timeZone: string): string {
     month: '2-digit',
     day: '2-digit',
   }).formatToParts(date);
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${map.year}-${map.month}-${map.day}`;
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function addDays(dateString: string, amount: number): string {
   const [year, month, day] = dateString.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day + amount));
-  return date.toISOString().slice(0, 10);
+  return new Date(Date.UTC(year, month - 1, day + amount)).toISOString().slice(0, 10);
 }
 
 function weeklyPeriod(dateString: string) {
@@ -804,20 +817,28 @@ function weeklyPeriod(dateString: string) {
   const weekday = date.getUTCDay() || 7;
   const start = addDays(dateString, 1 - weekday);
   const end = addDays(start, 6);
-
   const thursday = new Date(Date.UTC(year, month - 1, day + (4 - weekday)));
   const isoYear = thursday.getUTCFullYear();
   const yearStart = new Date(Date.UTC(isoYear, 0, 1));
   const week = Math.ceil((((thursday.getTime() - yearStart.getTime()) / 86_400_000) + 1) / 7);
-  return { start, end, key: `weekly:${isoYear}-W${String(week).padStart(2, '0')}`, label: `KW ${week} / ${isoYear}` };
+  return {
+    start,
+    end,
+    key: `weekly:${isoYear}-W${String(week).padStart(2, '0')}`,
+    label: `KW ${week} / ${isoYear}`,
+  };
 }
 
 function monthlyPeriod(dateString: string) {
   const [year, month] = dateString.split('-').map(Number);
-  const start = `${year}-${String(month).padStart(2, '0')}-01`;
-  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const end = `${year}-${String(month).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
-  return { start, end, key: `monthly:${year}-${String(month).padStart(2, '0')}`, label: `${String(month).padStart(2, '0')}/${year}` };
+  const monthText = String(month).padStart(2, '0');
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    start: `${year}-${monthText}-01`,
+    end: `${year}-${monthText}-${String(lastDay).padStart(2, '0')}`,
+    key: `monthly:${year}-${monthText}`,
+    label: `${monthText}/${year}`,
+  };
 }
 
 async function buildPeriodConsolidation(
@@ -837,7 +858,7 @@ async function buildPeriodConsolidation(
     WHERE date BETWEEN ${period.start} AND ${period.end}
     ORDER BY date ASC
   `;
-  const memoryRows = await client`
+  const memories = await client`
     SELECT memory_key, title, content, importance
     FROM therapeutic_memories
     WHERE status = 'active'
@@ -846,29 +867,18 @@ async function buildPeriodConsolidation(
     LIMIT 30
   `;
 
-  const sourceCount = summaries.length + checkins.length + memoryRows.length;
+  const sourceCount = summaries.length + checkins.length + memories.length;
   if (sourceCount === 0) return;
 
   let result = {
-    summary: `${summaries.length} Therapiesitzung(en), ${checkins.length} Check-in(s) und ${memoryRows.length} relevante Langzeiterinnerung(en) wurden für diesen Zeitraum zusammengeführt.`,
-    keyChanges: summaries.map((row) => row.key_insight).filter(Boolean).slice(-5),
-    stablePatterns: memoryRows.slice(0, 5).map((row) => `${row.title}: ${row.content}`),
+    summary: `${summaries.length} Therapiesitzung(en), ${checkins.length} Check-in(s) und ${memories.length} relevante Langzeiterinnerung(en) wurden für diesen Zeitraum zusammengeführt.`,
+    keyChanges: summaries.map((row) => row.key_insight).filter(Boolean).slice(-5) as string[],
+    stablePatterns: memories.slice(0, 5).map((row) => `${row.title}: ${row.content}`),
     openQuestions: summaries.flatMap((row) => asStringArray(row.follow_up_topics)).slice(-6),
   };
 
   if (openai) {
     try {
-      const compactData = {
-        sessions: summaries.map((row) => ({
-          topic: row.main_issue,
-          observations: asStringArray(row.key_observations),
-          insight: row.key_insight,
-          homework: row.homework,
-          followUp: asStringArray(row.follow_up_topics),
-        })),
-        checkins,
-        importantMemories: memoryRows.map((row) => ({ key: row.memory_key, title: row.title, content: row.content })),
-      };
       const completion = await openai.chat.completions.create({
         model: SYNTHESIS_MODEL,
         response_format: { type: 'json_object' },
@@ -876,9 +886,26 @@ async function buildPeriodConsolidation(
         messages: [
           {
             role: 'system',
-            content: `Du konsolidierst den longitudinalen Verlauf einer KVT/ACT-Selbsthilfe-App. Erstelle nur aus den gelieferten Daten eine knappe Verlaufssynthese. Trenne Veränderungen von stabilen Mustern und offenen Fragen. Hypothesen nie als Tatsachen formulieren. Antworte als JSON: {"summary":"...","keyChanges":["..."],"stablePatterns":["..."],"openQuestions":["..."]}.`,
+            content: 'Du konsolidierst den longitudinalen Verlauf einer KVT/ACT-Selbsthilfe-App. Erstelle nur aus den gelieferten Daten eine knappe Verlaufssynthese. Trenne Veränderungen von stabilen Mustern und offenen Fragen. Hypothesen nie als Tatsachen formulieren. Antworte als JSON: {"summary":"...","keyChanges":["..."],"stablePatterns":["..."],"openQuestions":["..."]}.',
           },
-          { role: 'user', content: JSON.stringify(compactData) },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              sessions: summaries.map((row) => ({
+                topic: row.main_issue,
+                observations: asStringArray(row.key_observations),
+                insight: row.key_insight,
+                homework: row.homework,
+                followUp: asStringArray(row.follow_up_topics),
+              })),
+              checkins,
+              importantMemories: memories.map((row) => ({
+                key: row.memory_key,
+                title: row.title,
+                content: row.content,
+              })),
+            }),
+          },
         ],
       });
       const parsed = JSON.parse(completion.choices[0]?.message?.content || '{}');
@@ -895,19 +922,27 @@ async function buildPeriodConsolidation(
     }
   }
 
-  const title = periodType === 'weekly' ? `Wochenkonsolidierung ${period.label}` : `Monatskonsolidierung ${period.label}`;
+  const title = periodType === 'weekly'
+    ? `Wochenkonsolidierung ${period.label}`
+    : `Monatskonsolidierung ${period.label}`;
   await client`
     INSERT INTO memory_consolidations (
       period_key, period_type, period_start, period_end, title, summary,
       key_changes, stable_patterns, open_questions, important_memory_keys,
       source_count, updated_at
     ) VALUES (
-      ${period.key}, ${periodType}, ${period.start}, ${period.end}, ${title}, ${result.summary},
+      ${period.key},
+      ${periodType},
+      ${period.start},
+      ${period.end},
+      ${title},
+      ${result.summary},
       ${JSON.stringify(result.keyChanges)}::jsonb,
       ${JSON.stringify(result.stablePatterns)}::jsonb,
       ${JSON.stringify(result.openQuestions)}::jsonb,
-      ${JSON.stringify(memoryRows.slice(0, 12).map((row) => row.memory_key))}::jsonb,
-      ${sourceCount}, NOW()
+      ${JSON.stringify(memories.slice(0, 12).map((row) => row.memory_key))}::jsonb,
+      ${sourceCount},
+      NOW()
     )
     ON CONFLICT (period_key) DO UPDATE SET
       title = EXCLUDED.title,
@@ -923,8 +958,8 @@ async function buildPeriodConsolidation(
 
 export async function refreshAutomaticMemoryConsolidations(referenceDate = new Date()): Promise<void> {
   await ensureTherapeuticMemoryStorage();
-  const profileRows = await client`SELECT timezone FROM patient_profile ORDER BY created_at ASC LIMIT 1`;
-  const timeZone = profileRows[0]?.timezone || 'Europe/Berlin';
+  const profile = await client`SELECT timezone FROM patient_profile ORDER BY created_at ASC LIMIT 1`;
+  const timeZone = profile[0]?.timezone || 'Europe/Berlin';
   const dateString = dateStringInTimezone(referenceDate, timeZone);
   await buildPeriodConsolidation('weekly', weeklyPeriod(dateString));
   await buildPeriodConsolidation('monthly', monthlyPeriod(dateString));
@@ -948,22 +983,26 @@ export async function getMemoryDashboardData() {
     ORDER BY COALESCE(occurred_at, created_at) DESC, importance DESC
     LIMIT 20
   `;
-  const corrections = await client`
+  const correctionRows = await client`
     SELECT correction_key, incorrect_claim, corrected_claim, reason, source_type, source_id
-    FROM memory_corrections WHERE status = 'active'
-    ORDER BY updated_at DESC LIMIT 20
+    FROM memory_corrections
+    WHERE status = 'active'
+    ORDER BY updated_at DESC
+    LIMIT 20
   `;
-  const consolidations = await client`
+  const consolidationRows = await client`
     SELECT period_key, period_type, period_start, period_end, title, summary,
            key_changes, stable_patterns, open_questions, important_memory_keys,
            source_count, updated_at
     FROM memory_consolidations
-    ORDER BY period_end DESC, updated_at DESC LIMIT 12
+    ORDER BY period_end DESC, updated_at DESC
+    LIMIT 12
   `;
+
   return {
     counts: counts[0] || { active: 0, episodic: 0, semantic: 0, hypotheses: 0 },
     recentMemories: recentMemories.map(mapRetrievedMemory),
-    corrections: corrections.map((row) => ({
+    corrections: correctionRows.map((row) => ({
       correctionKey: row.correction_key,
       incorrectClaim: row.incorrect_claim,
       correctedClaim: row.corrected_claim,
@@ -971,7 +1010,7 @@ export async function getMemoryDashboardData() {
       sourceType: row.source_type,
       sourceId: row.source_id,
     })) as MemoryCorrection[],
-    consolidations: consolidations.map(mapConsolidation),
+    consolidations: consolidationRows.map(mapConsolidation),
     embeddingMode: openai ? `${EMBEDDING_MODEL} (${EMBEDDING_DIMENSIONS}D)` : 'lexikalischer Fallback',
   };
 }
