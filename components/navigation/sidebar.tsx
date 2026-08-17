@@ -16,6 +16,7 @@ import {
   LogOut,
   Sparkles,
   Target,
+  Users,
 } from 'lucide-react';
 
 const navItems = [
@@ -24,6 +25,7 @@ const navItems = [
   { label: 'Check-in', href: '/check-in', icon: Activity },
   { label: 'Therapie', href: '/therapy', icon: MessageSquare },
   { label: 'Situationen', href: '/situations', icon: AlertCircle },
+  { label: 'Soziale Exposition', href: '/social-exposure', icon: Users },
   { label: 'Experimente', href: '/experiments', icon: FlaskConical },
   { label: 'Werte', href: '/values', icon: Compass },
   { label: 'Tagebuch', href: '/journal', icon: BookOpen },
