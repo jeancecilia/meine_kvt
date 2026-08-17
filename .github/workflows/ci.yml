@@ -28,7 +28,6 @@ jobs:
 
     env:
       DATABASE_URL: postgres://therapy:therapy_password@localhost:5432/therapy
-      NODE_ENV: production
 
     steps:
       - name: Checkout Code
@@ -37,7 +36,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install Dependencies
@@ -45,9 +44,13 @@ jobs:
 
       - name: Run Next.js Build
         run: npm run build
+        env:
+          NODE_ENV: production
 
       - name: Runtime Therapeutic Memory Smoke Test
         shell: bash
+        env:
+          NODE_ENV: production
         run: |
           set -euo pipefail
           npm start > /tmp/meine-kvt.log 2>&1 &
