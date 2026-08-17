@@ -45,14 +45,15 @@ export function classifyMotiveCheck(ratings: MotiveRatings): MotiveClassificatio
     ['validation', ratings.validationNeed],
     ['dating_relationship', ratings.datingRelationshipNeed],
     ['boredom_distraction', ratings.boredomDistraction],
-  ].sort((a, b) => b[1] - a[1]);
+  ];
+  motives.sort((a, b) => b[1] - a[1]);
 
   const [first, second] = motives;
   const isMixed = first[1] >= 5 && second[1] >= 5 && first[1] - second[1] <= 1;
   const topMotive: MotiveKey | 'mixed' = isMixed ? 'mixed' : first[0];
   const connectionRelevant = ratings.loneliness >= 5 || ratings.connectionNeed >= 5;
 
-  let label = isMixed ? 'Gemischte Motivation' : MOTIVE_LABELS[first[0]];
+  const label = isMixed ? 'Gemischte Motivation' : MOTIVE_LABELS[first[0]];
   let explanation = isMixed
     ? `Mehrere Motive sind gleichzeitig deutlich ausgeprägt (${MOTIVE_LABELS[first[0]]} ${first[1]}/10, ${MOTIVE_LABELS[second[0]]} ${second[1]}/10).`
     : `${MOTIVE_LABELS[first[0]]} ist im Moment der höchste erfasste Motivwert (${first[1]}/10).`;
@@ -102,7 +103,6 @@ export async function ensureMotiveCheckStorage(): Promise<void> {
   await client`CREATE INDEX IF NOT EXISTS motive_checks_occurred_at_idx ON motive_checks (occurred_at DESC)`;
   await client`CREATE INDEX IF NOT EXISTS motive_checks_status_idx ON motive_checks (status)`;
 
-  // Keep the currently active phase and experiment wording aligned with the refined method.
   await client`
     UPDATE treatment_modules
     SET title = 'Motive Decomposition',
