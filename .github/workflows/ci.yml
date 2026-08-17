@@ -8,8 +8,27 @@ on:
 
 jobs:
   build:
-    name: Next.js Build & Lint
+    name: Next.js Build & Memory Smoke Test
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: therapy
+          POSTGRES_USER: therapy
+          POSTGRES_PASSWORD: therapy_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U therapy -d therapy"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://therapy:therapy_password@localhost:5432/therapy
+      NODE_ENV: production
 
     steps:
       - name: Checkout Code
@@ -26,6 +45,40 @@ jobs:
 
       - name: Run Next.js Build
         run: npm run build
-        env:
-          DATABASE_URL: postgres://therapy:therapy_password@localhost:5432/therapy
-          NODE_ENV: production
+
+      - name: Runtime Therapeutic Memory Smoke Test
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm start > /tmp/meine-kvt.log 2>&1 &
+          APP_PID=$!
+          trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
+
+          ready=0
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent --show-error http://127.0.0.1:3000/api/memory > /tmp/memory-dashboard.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$ready" -ne 1 ]; then
+            echo "Application or /api/memory did not become healthy"
+            cat /tmp/meine-kvt.log
+            exit 1
+          fi
+
+          grep -q '"embeddingMode"' /tmp/memory-dashboard.json
+          grep -q '"counts"' /tmp/memory-dashboard.json
+
+          curl --fail --silent --show-error \
+            'http://127.0.0.1:3000/api/memory?q=Beziehung' \
+            > /tmp/memory-search.json
+
+          # CI intentionally has no OPENAI_API_KEY, so this also verifies the
+          # deterministic lexical fallback path instead of only the embedding path.
+          grep -q '"mode":"lexical"' /tmp/memory-search.json
+          grep -q '"corrections"' /tmp/memory-search.json
+
+          echo "Therapeutic Memory runtime smoke test passed"
