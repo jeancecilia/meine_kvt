@@ -15,6 +15,7 @@ import {
   treatmentPlanReviews,
 } from '@/lib/db/schema';
 import { asc, desc, eq } from 'drizzle-orm';
+import { getRecentMotiveChecks, motiveLabel } from '@/lib/therapy/motive-checks';
 
 export interface TherapyContextData {
   systemPrompt: string;
@@ -24,6 +25,7 @@ export interface TherapyContextData {
     activeHypothesesCount: number;
     activeExperiment: any;
     observationsCount: number;
+    motiveChecksCount: number;
     activePlan: any;
     activePhase: any;
     activeModules: any[];
@@ -34,7 +36,6 @@ export async function buildTherapyContext(sessionType: string = 'weekly'): Promi
   const profiles = await db.select().from(patientProfile).limit(1).catch(() => []);
   const profile = profiles[0] || { displayName: 'Patient', timezone: 'Europe/Berlin' };
 
-  // Master treatment plan must come before individual techniques.
   const plans = await db
     .select()
     .from(treatmentPlans)
@@ -138,6 +139,8 @@ export async function buildTherapyContext(sessionType: string = 'weekly'): Promi
     .limit(3)
     .catch(() => []);
 
+  const motiveChecks: any[] = await getRecentMotiveChecks(20).catch(() => []);
+
   const planSummary = activePlan
     ? `Version: ${activePlan.version}\nTitel: ${activePlan.title}\nGesamtziel: ${activePlan.overallGoal}\nZeitraum: ${activePlan.startedAt} bis ${activePlan.plannedEndAt || 'offen'}\nNächster formaler Review: ${activePlan.reviewDueAt || 'nicht gesetzt'}`
     : 'Kein aktiver Therapieplan in der Datenbank.';
@@ -170,12 +173,31 @@ export async function buildTherapyContext(sessionType: string = 'weekly'): Promi
   if (activeExp) {
     experimentSummary = `Titel: ${activeExp.title}\nHypothese: ${activeExp.hypothesis}\nVorhersage: ${activeExp.prediction}\nAuftrag: ${activeExp.instructions || 'N/A'}\nLaufzeit: ${activeExp.startDate} bis ${activeExp.endDate}`;
     if (observations.length > 0) {
-      experimentSummary += '\nBeobachtungen:\n' + observations.map((obs, idx) =>
-        `${idx + 1}. Stimmung ${obs.moodBefore ?? '?'}→${obs.moodAfter ?? '?'}, Einsamkeit ${obs.lonelinessBefore}→${obs.lonelinessAfter ?? '?'}, Connection ${obs.connectionNeedBefore}→${obs.connectionNeedAfter ?? '?'}, romantisch/sexuell ${obs.romanticSexualNeedBefore}→${obs.romanticSexualNeedAfter ?? '?'}, Neuheit ${obs.noveltyDriveBefore}→${obs.noveltyDriveAfter ?? '?'}; Handlung: ${obs.actionTaken || 'N/A'}${obs.note ? `; Notiz: ${obs.note}` : ''}`
+      experimentSummary += '\nConnection-Interventionen:\n' + observations.map((obs, idx) =>
+        `${idx + 1}. Stimmung ${obs.moodBefore ?? '?'}→${obs.moodAfter ?? '?'}, Einsamkeit ${obs.lonelinessBefore}→${obs.lonelinessAfter ?? '?'}, Connection ${obs.connectionNeedBefore}→${obs.connectionNeedAfter ?? '?'}, Libido ${obs.romanticSexualNeedBefore}→${obs.romanticSexualNeedAfter ?? '?'}, Neuheit ${obs.noveltyDriveBefore}→${obs.noveltyDriveAfter ?? '?'}; Handlung: ${obs.actionTaken || 'N/A'}${obs.note ? `; Notiz: ${obs.note}` : ''}`
       ).join('\n');
     } else {
-      experimentSummary += '\nNoch keine realen Beobachtungen protokolliert.';
+      experimentSummary += '\nNoch keine abgeschlossenen Connection-Interventionen protokolliert.';
     }
+  }
+
+  let motiveCheckSummary = 'Noch keine Dating-/Tinder-Motivchecks erfasst.';
+  if (motiveChecks.length > 0) {
+    const counts = new Map<string, number>();
+    for (const check of motiveChecks) {
+      const key = String(check.top_motive || 'unknown');
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    const distribution = Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, count]) => `${motiveLabel(key)}: ${count}`)
+      .join(', ');
+    const experimentEligibleCount = motiveChecks.filter((check) => Boolean(check.experiment_recommended)).length;
+
+    motiveCheckSummary = `Stichprobe n=${motiveChecks.length}. Höchster Motivwert nach Häufigkeit: ${distribution}. Connection-Experiment angeboten bei ${experimentEligibleCount}/${motiveChecks.length} Checks.\n` +
+      motiveChecks.slice(0, 12).map((check, idx) =>
+        `${idx + 1}. ${new Date(check.occurred_at).toISOString()}: Libido ${Number(check.libido)}, Connection ${Number(check.connection_need)}, Einsamkeit ${Number(check.loneliness)}, Neuheit ${Number(check.novelty_drive)}, Bestätigung ${Number(check.validation_need)}, Dating/Beziehung ${Number(check.dating_relationship_need)}, Langeweile ${Number(check.boredom_distraction)} → höchster Motivwert: ${motiveLabel(String(check.top_motive))}; Status: ${check.status}.`
+      ).join('\n');
   }
 
   const situationsSummary = recentSituations.length > 0
@@ -225,6 +247,9 @@ ${currentFormulation?.summary || 'Noch keine Fallformulierung.'}
 ARBEITSHYPOTHESEN:
 ${hypothesesSummary}
 
+MOTIVE DECOMPOSITION — DATING-/TINDER-IMPULSE:
+${motiveCheckSummary}
+
 AKTIVES EXPERIMENT:
 ${experimentSummary}
 
@@ -238,7 +263,7 @@ ${sessionSummaryText}
 3. SITZUNGSMODUS: ${sessionType.toUpperCase()}
 ═══════════════════════════════════════════════════════════════
 ${sessionType === 'weekly'
-  ? `Wöchentliche Struktursitzung:\n1. Kurzer Safety-/Zustandscheck.\n2. Daten und Experiment seit letzter Sitzung reviewen.\n3. Gemeinsame Agenda.\n4. Eine Intervention passend zur aktuellen Phase.\n5. Höchstens einen primären experimentellen Schritt vereinbaren.\n6. Prüfen, ob ein Plan-Review nötig ist.`
+  ? `Wöchentliche Struktursitzung:\n1. Kurzer Safety-/Zustandscheck.\n2. Daten, Motivchecks und Experiment seit letzter Sitzung reviewen.\n3. Gemeinsame Agenda.\n4. Eine Intervention passend zur aktuellen Phase.\n5. Höchstens einen primären experimentellen Schritt vereinbaren.\n6. Prüfen, ob ein Plan-Review nötig ist.`
   : sessionType === 'focused'
   ? 'Fokussierte Bearbeitung eines konkreten Themas mit Bezug zur aktuellen Phase. Wenn das Thema klar außerhalb der Phase liegt, zunächst begründen, ob eine Planabweichung sinnvoll ist.'
   : 'Kurze pragmatische Klärung eines akuten Impulses. Keine neue große Therapieagenda eröffnen.'}
@@ -247,8 +272,10 @@ ${sessionType === 'weekly'
 4. THERAPEUTISCHE HALTUNG
 ═══════════════════════════════════════════════════════════════
 - Epistemische Bescheidenheit: Fakten, Selbstbericht, Interpretation und Arbeitshypothese klar unterscheiden.
+- Dating-App-Nutzung niemals pauschal als Einsamkeitsregulation deuten. Libido, echtes Dating-/Beziehungsinteresse, Neuheit, Bestätigung und Langeweile sind eigenständige mögliche Motive.
+- Nutze Motivchecks als zeitlich begrenzte Stichprobe, nicht als dauerhaftes Pflicht-Ritual.
 - Präzise und sokratisch: jeweils 1–2 fokussierte Fragen statt Textwüsten.
-- Datenbezug: konkrete Check-ins, Situationen und Experimente nutzen.
+- Datenbezug: konkrete Check-ins, Situationen, Motivchecks und Experimente nutzen.
 - Von Einsicht zu Verhalten: Analyse soll möglichst in Beobachtung, Experiment oder wertebezogene Handlung münden.
 - Keine automatischen medizinischen oder Persönlichkeitsdiagnosen.
 - Keine Medikamentenänderungen anweisen.
@@ -263,6 +290,7 @@ ${sessionType === 'weekly'
       activeHypothesesCount: activeHypotheses.length,
       activeExperiment: activeExp,
       observationsCount: observations.length,
+      motiveChecksCount: motiveChecks.length,
       activePlan,
       activePhase,
       activeModules,
