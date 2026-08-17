@@ -17,6 +17,7 @@ import {
   Sparkles,
   Target,
   Users,
+  BrainCircuit,
 } from 'lucide-react';
 
 const navItems = [
@@ -30,6 +31,7 @@ const navItems = [
   { label: 'Werte', href: '/values', icon: Compass },
   { label: 'Tagebuch', href: '/journal', icon: BookOpen },
   { label: 'Fallformulierung', href: '/formulation', icon: FileText },
+  { label: 'Langzeitgedächtnis', href: '/memory', icon: BrainCircuit },
   { label: 'Fortschritt', href: '/progress', icon: TrendingUp },
   { label: 'Einstellungen', href: '/settings', icon: Settings },
 ];

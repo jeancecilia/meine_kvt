@@ -289,3 +289,83 @@ export const assessmentResponses = pgTable('assessment_responses', {
   response: integer('response').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// Long-term therapeutic memory. Raw clinical data stays in its original tables;
+// these rows are durable, source-aware summaries/facts used for retrieval months later.
+export const therapeuticMemories = pgTable('therapeutic_memories', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  memoryKey: text('memory_key').notNull().unique(),
+  memoryType: text('memory_type').notNull(), // episodic | semantic | formulation | hypothesis | milestone | correction
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  domains: jsonb('domains').default([]),
+  importance: numeric('importance', { precision: 3, scale: 2 }).notNull().default('0.50'),
+  confidence: numeric('confidence', { precision: 3, scale: 2 }).notNull().default('0.70'),
+  status: text('status').notNull().default('active'), // active | superseded | retracted
+  occurredAt: timestamp('occurred_at'),
+  sourceType: text('source_type'),
+  sourceId: text('source_id'),
+  sourceLabel: text('source_label'),
+  supersedesMemoryId: uuid('supersedes_memory_id'),
+  embedding: jsonb('embedding'),
+  embeddingModel: text('embedding_model'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// A memory can be supported by more than one original source. Excerpts make
+// later provenance checks possible without treating the derived memory as raw truth.
+export const memorySources = pgTable('memory_sources', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  memoryId: uuid('memory_id').references(() => therapeuticMemories.id, { onDelete: 'cascade' }).notNull(),
+  sourceType: text('source_type').notNull(),
+  sourceId: text('source_id'),
+  sourceDate: timestamp('source_date'),
+  sourceExcerpt: text('source_excerpt'),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Explicit corrections have precedence over older memories during retrieval.
+export const memoryCorrections = pgTable('memory_corrections', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  correctionKey: text('correction_key').notNull().unique(),
+  incorrectClaim: text('incorrect_claim').notNull(),
+  correctedClaim: text('corrected_claim').notNull(),
+  reason: text('reason'),
+  sourceType: text('source_type'),
+  sourceId: text('source_id'),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Weekly/monthly/phase snapshots prevent long histories from collapsing into
+// only the most recent sessions and preserve change over time.
+export const memoryConsolidations = pgTable('memory_consolidations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  periodKey: text('period_key').notNull().unique(),
+  periodType: text('period_type').notNull(), // weekly | monthly | phase | manual
+  periodStart: text('period_start').notNull(),
+  periodEnd: text('period_end').notNull(),
+  title: text('title').notNull(),
+  summary: text('summary').notNull(),
+  keyChanges: jsonb('key_changes').default([]),
+  stablePatterns: jsonb('stable_patterns').default([]),
+  openQuestions: jsonb('open_questions').default([]),
+  importantMemoryKeys: jsonb('important_memory_keys').default([]),
+  sourceCount: integer('source_count').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Retrieval audit trail: which older memories were selected for a particular
+// therapy query. Useful for debugging continuity and accidental omissions.
+export const memoryRetrievalEvents = pgTable('memory_retrieval_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  query: text('query').notNull(),
+  mode: text('mode').notNull().default('hybrid'),
+  selectedMemoryKeys: jsonb('selected_memory_keys').default([]),
+  selectedCorrectionKeys: jsonb('selected_correction_keys').default([]),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});

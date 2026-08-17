@@ -17,6 +17,7 @@ import {
 } from '@/lib/db/schema';
 import { asc, desc, eq } from 'drizzle-orm';
 import { getRecentSocialExposureLogs } from '@/lib/therapy/social-exposures';
+import { formatTherapeuticMemoryContext, retrieveTherapeuticMemory } from '@/lib/therapy/memory';
 
 export interface TherapyContextData {
   systemPrompt: string;
@@ -32,13 +33,29 @@ export interface TherapyContextData {
   };
 }
 
-export async function buildTherapyContext(sessionType: string = 'weekly'): Promise<TherapyContextData> {
+export async function buildTherapyContext(
+  sessionType: string = 'weekly',
+  retrievalQuery: string = '',
+): Promise<TherapyContextData> {
   const profiles = await db.select().from(patientProfile).limit(1).catch(() => []);
   const profile = profiles[0] || { displayName: 'Patient', timezone: 'Europe/Berlin' };
 
   // Ensure the cross-cutting social-exposure layer exists before loading the
   // current formulation/modules. This may create formulation v0.2 from the new anamnesis.
   const recentSocialExposures = await getRecentSocialExposureLogs(5).catch(() => []);
+
+  // Retrieve old but thematically relevant material in addition to the normal
+  // short-term context. A failure here must never make therapy chat unavailable.
+  let longTermMemoryContext = 'Langzeitgedächtnis konnte für diese Anfrage nicht geladen werden.';
+  try {
+    const retrievedMemory = await retrieveTherapeuticMemory(
+      retrievalQuery.trim() || `Therapiesitzung Modus ${sessionType}`,
+      8,
+    );
+    longTermMemoryContext = formatTherapeuticMemoryContext(retrievedMemory);
+  } catch (error: any) {
+    console.warn('Long-term therapeutic memory retrieval unavailable:', error?.message || error);
+  }
 
   // Master treatment plan must come before individual techniques.
   const plans = await db
@@ -229,7 +246,7 @@ LETZTER FORMALER PLAN-REVIEW:
 ${planReviewSummary}
 
 ═══════════════════════════════════════════════════════════════
-2. KLINISCHE DATEN & VERLAUFSKONTEXT
+2. KLINISCHE DATEN & KURZZEIT-VERLAUFSKONTEXT
 ═══════════════════════════════════════════════════════════════
 TÄGLICHE CHECK-INS (letzte Tage):
 ${checkinSummary}
@@ -259,23 +276,31 @@ LETZTE SITZUNGEN:
 ${sessionSummaryText}
 
 ═══════════════════════════════════════════════════════════════
-3. SITZUNGSMODUS: ${sessionType.toUpperCase()}
+3. THERAPEUTISCHES LANGZEITGEDÄCHTNIS
+═══════════════════════════════════════════════════════════════
+${longTermMemoryContext}
+
+═══════════════════════════════════════════════════════════════
+4. SITZUNGSMODUS: ${sessionType.toUpperCase()}
 ═══════════════════════════════════════════════════════════════
 ${sessionType === 'weekly'
-  ? `Wöchentliche Struktursitzung:\n1. Kurzer Safety-/Zustandscheck.\n2. Daten, Motivchecks, Social-Exposure-Logs und Experiment seit letzter Sitzung reviewen.\n3. Gemeinsame Agenda.\n4. Eine Intervention passend zur aktuellen Phase.\n5. Höchstens einen primären experimentellen Schritt vereinbaren.\n6. Prüfen, ob ein Plan-Review nötig ist.`
+  ? `Wöchentliche Struktursitzung:\n1. Kurzer Safety-/Zustandscheck.\n2. Daten, Motivchecks, Social-Exposure-Logs, Experiment und relevante Langzeiterinnerungen seit letzter Sitzung reviewen.\n3. Gemeinsame Agenda.\n4. Eine Intervention passend zur aktuellen Phase.\n5. Höchstens einen primären experimentellen Schritt vereinbaren.\n6. Prüfen, ob ein Plan-Review nötig ist.`
   : sessionType === 'focused'
-  ? 'Fokussierte Bearbeitung eines konkreten Themas mit Bezug zur aktuellen Phase. Bei sozialer Angst/Annäherungsverhalten die Social-Exposure-Daten nutzen und zwischen Angstüberwindung, freiwilliger sozialer Annäherung, Datinginteresse, Einsamkeit und selbst auferlegtem Leistungsdruck differenzieren.'
+  ? 'Fokussierte Bearbeitung eines konkreten Themas mit Bezug zur aktuellen Phase. Ältere thematisch passende Erinnerungen aktiv nutzen, statt bereits geklärte Anamnese neu abzufragen. Bei sozialer Angst/Annäherungsverhalten die Social-Exposure-Daten nutzen und zwischen Angstüberwindung, freiwilliger sozialer Annäherung, Datinginteresse, Einsamkeit und selbst auferlegtem Leistungsdruck differenzieren.'
   : 'Kurze pragmatische Klärung eines akuten Impulses. Keine neue große Therapieagenda eröffnen.'}
 
 ═══════════════════════════════════════════════════════════════
-4. THERAPEUTISCHE HALTUNG
+5. THERAPEUTISCHE HALTUNG
 ═══════════════════════════════════════════════════════════════
 - Epistemische Bescheidenheit: Fakten, Selbstbericht, Interpretation und Arbeitshypothese klar unterscheiden.
+- Kontinuität: Wenn der Langzeitkontext eine frühere Antwort bereits enthält, nicht unnötig wieder bei der Anamnese beginnen. Stattdessen an den damaligen Stand und die noch offene Frage anschließen.
+- Korrekturtreue: Explizite Memory-Korrekturen haben Vorrang vor alten Sitzungszusammenfassungen, Transkripten und Ableitungen.
+- Quellenbewusstsein: Verdichtete Memories sind keine Rohdaten. Bei Widersprüchen aktuelle Angaben und verknüpfte Quellen prüfen bzw. nachfragen.
 - Funktionsanalyse vor Verhaltensbewertung: Dating-App-Impulse dienen distinkten Motiven (Sex/Libido, Verbundenheit, Einsamkeitsregulation, Neuheit/Thrill, Bestätigung, echtes Datinginteresse, Langeweile). Echte sexuelle Motivation ist normal und wird nicht pathologisiert.
 - Reales Ansprechen von Menschen ist methodisch vom Dating-App-Impuls zu trennen. Aus dem Verhalten allein darf weder Einsamkeit noch Novelty-Seeking abgeleitet werden. Nach der Anamnese kann es teilweise bewusstes, adaptives Expositions-/Annäherungsverhalten bei früherer sozialer Angst sein.
 - Bei sozialer Exposition interessieren insbesondere konkrete Befürchtung, Angst, Vermeidungsimpuls, erwartete vs. tatsächliche Reaktion, Sicherheitsverhalten und Wahlfreiheit. Therapieziel ist nicht eine maximale Zahl angesprochener Menschen, sondern die Freiheit, anzusprechen oder es zu lassen, ohne dass Angst oder Leistungsdruck die Entscheidung übernimmt.
 - Präzise und sokratisch: jeweils 1–2 fokussierte Fragen statt Textwüsten.
-- Datenbezug: konkrete Check-ins, Situationen, Motiv-Checks, Social-Exposure-Logs und Experimente nutzen.
+- Datenbezug: konkrete Check-ins, Situationen, Motiv-Checks, Social-Exposure-Logs, Experimente und relevante Long-Term-Memories nutzen.
 - Von Einsicht zu Verhalten: Analyse soll in Beobachtung, Experiment oder wertebezogene Handlung münden.
 - Keine automatischen medizinischen oder Persönlichkeitsdiagnosen.
 - Keine Medikamentenänderungen anweisen.
