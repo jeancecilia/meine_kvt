@@ -2,9 +2,11 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { experiments, experimentObservations, treatmentPlans, treatmentPhases } from '@/lib/db/schema';
 import { asc, desc, eq } from 'drizzle-orm';
+import { ensureMotiveCheckStorage } from '@/lib/therapy/motive-checks';
 
 export async function GET() {
   try {
+    await ensureMotiveCheckStorage();
     const list = await db.select().from(experiments).orderBy(desc(experiments.createdAt));
     const observations = await db.select().from(experimentObservations).orderBy(desc(experimentObservations.observedAt));
 
@@ -20,6 +22,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    await ensureMotiveCheckStorage();
     const body = await request.json();
 
     const plans = await db.select().from(treatmentPlans).where(eq(treatmentPlans.status, 'active')).limit(1).catch(() => []);
