@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { buildTherapyContext } from '@/lib/therapy/context';
 import { evaluateSafetyRisk } from '@/lib/therapy/safety';
 import { ensureFocusedSessionMemory20260817 } from '@/lib/therapy/focused-session-memory';
+import { syncLongitudinalHistory } from '@/lib/therapy/memory-history';
 
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
@@ -35,6 +36,12 @@ export async function POST(request: Request) {
     // 2026-08-17 before generating any future therapy response. This also
     // creates formulation v0.3 and the related working hypotheses idempotently.
     await ensureFocusedSessionMemory20260817();
+
+    // Snapshot hypothesis revisions and the current/completed treatment phases
+    // before retrieval so changes remain reconstructable months or years later.
+    await syncLongitudinalHistory(new Date()).catch((error) => {
+      console.warn('Longitudinal history sync deferred:', error?.message || error);
+    });
 
     // The current user message is the retrieval query. This lets an old but
     // relevant episode from months ago re-enter context even when it is not one
