@@ -36,7 +36,10 @@ export async function POST(request: Request) {
     // creates formulation v0.3 and the related working hypotheses idempotently.
     await ensureFocusedSessionMemory20260817();
 
-    const contextData = await buildTherapyContext(sessionType || 'weekly');
+    // The current user message is the retrieval query. This lets an old but
+    // relevant episode from months ago re-enter context even when it is not one
+    // of the three most recent session summaries.
+    const contextData = await buildTherapyContext(sessionType || 'weekly', message);
 
     let currentSessionId = sessionId;
     if (!currentSessionId) {
