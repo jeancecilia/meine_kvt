@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { X, Activity, MessageSquare, AlertCircle, Bookmark, Sparkles, Users } from 'lucide-react';
+import { X, Activity, MessageSquare, AlertCircle, Bookmark, Sparkles, Users, BrainCircuit } from 'lucide-react';
 
 interface QuickActionModalProps {
   isOpen: boolean;
@@ -39,6 +39,13 @@ export function QuickActionModal({ isOpen, onClose }: QuickActionModalProps) {
       href: '/therapy',
       icon: MessageSquare,
       color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+    },
+    {
+      label: 'Langzeitgedächtnis',
+      description: 'Alte Learnings suchen & Verlauf ansehen',
+      href: '/memory',
+      icon: BrainCircuit,
+      color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
     },
     {
       label: 'Tagebuch-Eintrag / Gedanke',
