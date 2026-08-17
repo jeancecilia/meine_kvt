@@ -77,11 +77,8 @@ export async function ensureFocusedSessionMemory20260817(): Promise<void> {
       COALESCE(base.protective_factors, '[]'::jsonb) || ${JSON.stringify(protective)}::jsonb,
       ${JSON.stringify(['hyp-001', 'hyp-002', 'hyp-003', 'hyp-004'])}::jsonb,
       NOW(), NOW()
-    FROM (
-      SELECT * FROM case_formulations
-      ORDER BY created_at DESC
-      LIMIT 1
-    ) AS base
+    FROM case_formulations AS base
+    WHERE base.id = 'form-v0.2'
     ON CONFLICT (id) DO UPDATE SET
       summary = EXCLUDED.summary,
       predisposing_factors = EXCLUDED.predisposing_factors,
