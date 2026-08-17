@@ -19,11 +19,12 @@ Mehr positiven Affekt und alltägliche Freude entwickeln, Einsamkeit reduzieren 
 - Schema- und interpersonelle/CBASP-orientierte Elemente werden für wiederkehrende Beziehungs- und Bedeutungsmodelle genutzt.
 - ADHS-/Novelty-Mechanismen werden als Arbeitshypothese berücksichtigt, nicht als universelle Erklärung.
 - Interpretationen bleiben Hypothesen, bis wiederholte Beobachtungen oder Verhaltensexperimente sie stützen.
+- Reales Ansprechen von Menschen wird methodisch von Dating-App-Nutzung getrennt. Es kann adaptives Expositions-/Annäherungsverhalten bei früherer sozialer Angst sein und darf nicht allein aus dem Verhalten als Einsamkeits- oder Neuheitsregulation interpretiert werden.
 
 ## Therapierhythmus
 
 - **Täglich:** 30–60 Sekunden Check-in.
-- **Situativ:** relevante Situationen oder Experiment-Beobachtungen protokollieren.
+- **Situativ:** relevante Situationen, Motiv-Snapshots, Social-Exposure-Logs oder Experiment-Beobachtungen protokollieren.
 - **Bei Bedarf:** kurze fokussierte KI-Sitzung.
 - **1× pro Woche:** strukturierte KVT/ACT-Wochensitzung.
 - **Alle 2–4 Wochen:** größerer Verlaufs- und Therapieplan-Review, sofern genug Daten vorliegen.
@@ -58,12 +59,14 @@ Ein belastbares Ausgangsmodell schaffen, ohne Hypothesen mit Diagnosen oder Tats
 - Situation 001
 - Experiment 001
 
-### Erfolgskriterien
+### Nachtrag zur Anamnese / Fallformulierung v0.2
 
-- T0 erfasst
-- Therapieziele definiert
-- Fallformulierung v0.1 vorhanden
-- Sicherheitsstatus dokumentiert
+Der Patient berichtet historische Züge sozialer Angst bzw. sozialer Hemmung. Seit etwa einem Jahr sucht er bewusst soziale Situationen auf und spricht aktiv fremde Menschen an; subjektiv war dieses selbst entwickelte Annäherungs-/Expositionstraining hilfreich. Daraus folgt:
+
+- Aktives Ansprechen ist nicht automatisch ein Symptom oder ein Marker für Einsamkeit/Novelty-Seeking.
+- Es kann bewusstes, adaptives Expositionsverhalten sein.
+- Die genaue frühere Ausprägung sozialer Angst und mögliche heutige Restsymptome werden in einer fokussierten Sitzung separat geklärt.
+- Als Schutzfaktor gilt die hohe Bereitschaft, sich trotz Unbehagen realen Verhaltensexperimenten auszusetzen.
 
 ---
 
@@ -74,39 +77,61 @@ Ein belastbares Ausgangsmodell schaffen, ohne Hypothesen mit Diagnosen oder Tats
 
 ### Ziel
 
-Verstehen, welche Mechanismen Dating-/Neuheitsimpulse und einen möglicherweise geringen Belohnungsnachhall tatsächlich aufrechterhalten.
+Verstehen, welche Mechanismen Dating-/Neuheitsimpulse und einen möglicherweise geringen Belohnungsnachhall tatsächlich aufrechterhalten, ohne funktional unterschiedliche Verhaltensweisen vorschnell gleichzusetzen.
 
-### Module
+### Modul A – Motive Decomposition bei Dating-Apps
 
-#### Connection vs. Novelty
+Bei einem Dating-/Tinder-Impuls wird kurz differenziert zwischen:
 
-Einsamkeit, allgemeines Verbundenheitsbedürfnis, romantisch-sexuelles Bedürfnis und Neuheitsdrang getrennt erfassen.
+- Libido / Sex
+- Verbundenheitsbedarf
+- Einsamkeit
+- Neuheit / Kick
+- Bestätigung
+- echtem Dating-/Beziehungsinteresse
+- Langeweile / Ablenkung
 
-#### Reward / Habituation
+Nur wenn **Einsamkeit oder Verbundenheitsbedarf ≥ 5/10** ist, wird Experiment 001 angeboten. Reine Libido, echtes Datinginteresse oder andere Motive werden nicht pathologisiert.
+
+### Experiment 001 – Connection-Anteil testen
+
+Wenn Einsamkeit/Verbundenheit relevant ist:
+
+1. Vorher-Werte erfassen.
+2. 15–30 Minuten echte soziale Verbindung herstellen.
+3. Erst danach Nachher-Werte erfassen.
+4. Dating bleibt anschließend uneingeschränkt erlaubt.
+
+Dadurch lässt sich prüfen, welche Komponenten sich durch soziale Verbindung verändern und welche eigenständig bestehen bleiben.
+
+### Modul B – Reward / Habituation
 
 Wollen, Erreichen, tatsächliches Genießen und positiven Nachhall bei Erfolgen und neuen Reizen unterscheiden.
 
-#### Experiment 001 – Connection vs. Novelty
+### Modul C – Soziale Exposition / Annäherungsverhalten
 
-Bei Einsamkeit ≥ 5/10 werden vor einer Dating-/Neuheitshandlung folgende Werte erfasst:
+Reales Leute-Ansprechen wird separat dokumentiert. Relevant sind:
 
-- Stimmung
-- Einsamkeit
-- Verbundenheitsbedarf
-- romantisch-sexuelles Bedürfnis
-- Neuheits-/Stimulationsdrang
+- konkreter Zweck der Annäherung (z. B. Exposition, Neugier, soziale Kompetenz, Dating)
+- soziale Angst vorher/nachher
+- konkrete Befürchtung
+- erwartete Ablehnung/Peinlichkeit
+- Vermeidungsimpuls
+- Sicherheitsverhalten
+- tatsächliche Reaktion der Situation
+- innerer Druck, jemanden ansprechen zu „müssen“
+- subjektive Wahlfreiheit
+- Learning
 
-Danach wird 15–30 Minuten echte soziale Verbindung hergestellt. Anschließend werden dieselben Werte erneut erfasst. Dating bleibt danach erlaubt.
-
-### Aktuelle Vorhersage
-
-Wenn fehlende Verbundenheit ein relevanter Treiber eines Teils der Kontaktsuche ist, sollten echte soziale Gespräche Einsamkeit und den unmittelbaren Suchimpuls teilweise reduzieren. Romantisch-sexuelles Interesse und Neuheitsdrang können dabei eigenständig bestehen bleiben.
+Das Ziel ist **nicht**, möglichst viele Personen anzusprechen. Ziel ist die Freiheit, Menschen anzusprechen oder es sein zu lassen, ohne dass soziale Angst oder selbst auferlegter Leistungsdruck die Entscheidung übernimmt.
 
 ### Erfolgskriterien
 
-- mehrere reale Experiment-Beobachtungen
-- Connection vs. Novelty anhand Daten besser differenzierbar
+- mehrere reale Motiv-Snapshots statt pauschaler Tinder-Interpretation
+- mehrere reale Experiment-001-Beobachtungen, sofern Connection-Trigger tatsächlich auftreten
 - Belohnungsnachhall bei mindestens einem weiteren positiven Ereignis beobachtet
+- soziale Annäherung wird funktional korrekt von Einsamkeits-/Novelty-Regulation getrennt
+- falls Social-Exposure-Logs entstehen: erwartete vs. tatsächliche soziale Folgen und Wahlfreiheit werden sichtbar
 
 ---
 
@@ -187,15 +212,6 @@ Echte Inkompatibilität besser von Habituation, Einsamkeitsregulation und Neuhei
 - Nähe / Einsamkeit / Bestätigung
 - CBASP-orientierte Konsequenzanalyse, wenn passend
 
-### Interpersonelles Schema
-
-1. Gewünschtes Ergebnis
-2. eigenes Verhalten
-3. Reaktion des Gegenübers
-4. tatsächliches Ergebnis
-5. langfristige Konsequenz
-6. alternative Handlung
-
 ---
 
 ## Phase 6 – Integration & Rückfallprävention
@@ -213,15 +229,6 @@ Wirksame Strategien konsolidieren und einen konkreten Erhaltungs-/Rückfallplan 
 - Warnzeichen und Risikokonstellationen
 - Rückfallprävention
 - persönliches psychologisches Betriebshandbuch
-
-### Betriebshandbuch – Zielformat
-
-Konkrete Wenn-Dann-Regeln, z. B.:
-
-- Wenn Neuheitsdrang mehrere Tage stark ansteigt, prüfe zuerst Einsamkeit, Stress, Langeweile und Werteausrichtung.
-- Wenn etwas Vertrautes plötzlich „falsch“ wirkt, trenne objektive Qualitätsmerkmale von reinem Neuheitsverlust.
-- Wenn ein großes Ziel erreicht wird, beobachte Belohnungsnachhall, bevor sofort das nächste Ziel eröffnet wird.
-- Wenn depressive Symptome oder Suizidgedanken deutlich zunehmen, wechselt der Prozess von Selbsthilfe zu menschlicher/medizinischer Abklärung.
 
 ---
 
@@ -241,6 +248,12 @@ Konkrete Wenn-Dann-Regeln, z. B.:
 - Schlafqualität
 - Lebenszufriedenheit
 
+### Situative Messungen
+
+- Dating-App-Motiv-Snapshots
+- Experiment 001 Vorher/Nachher bei relevantem Connection-Trigger
+- Social-Exposure-/Approach-Logs bei relevanten realen Annäherungssituationen
+
 ### Standardisierte Assessments
 
 Die Datenbank unterstützt standardisierte Assessments. Es wird **keine Baseline erfunden**; Fragebögen werden erst gespeichert, wenn sie tatsächlich ausgefüllt wurden.
@@ -258,10 +271,12 @@ Die Datenbank unterstützt standardisierte Assessments. Es wird **keine Baseline
    - **Fallformulierung:** Wie verstehen wir das Problem aktuell?
    - **Therapieplan:** Was tun wir in welcher Reihenfolge damit?
 
-## Aktuelle offene Hypothesen
+## Aktuelle offene Hypothesen / Klärungspunkte
 
 - ADHS-/Neuheits- und Habituationsmuster könnte einen relevanten Teil des bereichsübergreifenden „haben wollen → erreichen → Interesse sinkt“-Musters erklären.
 - Die Diskrepanz zwischen erwarteter und tatsächlich erlebter Freude könnte durch anschließende Selbstbeobachtung und Grübeln verstärkt werden.
-- Ein Teil akuter romantischer Kontaktsuche könnte situativ durch Einsamkeit/Verbundenheitsbedarf mitvermittelt sein; sexuelles Interesse und Neuheitsdrang werden separat betrachtet.
+- Ein Teil akuter romantischer Kontaktsuche könnte situativ durch Einsamkeit/Verbundenheitsbedarf mitvermittelt sein; sexuelles Interesse, echtes Datinginteresse und Neuheitsdrang werden separat betrachtet.
+- Historisch berichtete soziale Angst/soziale Hemmung und deren heutige Restrelevanz sind noch nicht ausreichend geklärt.
+- Eigeninitiierte reale soziale Annäherung kann adaptives Expositionsverhalten sein; gleichzeitig soll geprüft werden, ob daraus irgendwo ein selbst auferlegter Leistungsdruck („ich sollte jemanden ansprechen“) entstanden ist.
 
 Keine dieser Hypothesen ist als abschließende Diagnose oder Tatsache zu behandeln.
