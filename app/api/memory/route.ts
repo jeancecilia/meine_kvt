@@ -4,11 +4,17 @@ import {
   refreshAutomaticMemoryConsolidations,
   retrieveTherapeuticMemory,
 } from '@/lib/therapy/memory';
+import { syncLongitudinalHistory } from '@/lib/therapy/memory-history';
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const query = (searchParams.get('q') || '').trim();
+
+    // Keep current hypothesis revisions and treatment-phase snapshots in sync
+    // whenever the memory workspace is opened or searched.
+    await syncLongitudinalHistory(new Date());
+
     if (!query) {
       const dashboard = await getMemoryDashboardData();
       return NextResponse.json(dashboard);
@@ -32,6 +38,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unbekannte Memory-Aktion' }, { status: 400 });
     }
     await refreshAutomaticMemoryConsolidations(new Date());
+    await syncLongitudinalHistory(new Date());
     const dashboard = await getMemoryDashboardData();
     return NextResponse.json(dashboard);
   } catch (error: any) {
