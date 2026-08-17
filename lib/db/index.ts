@@ -33,7 +33,8 @@ function normalizeSqlParameter(value: unknown): unknown {
 export const client = new Proxy(rawClient, {
   apply(target, thisArg, argArray) {
     const [strings, ...values] = argArray;
-    const isTaggedTemplate = Array.isArray(strings) && Array.isArray(strings.raw);
+    const isTaggedTemplate = Array.isArray(strings)
+      && Object.prototype.hasOwnProperty.call(strings, 'raw');
 
     if (!isTaggedTemplate) {
       return Reflect.apply(target, thisArg, argArray);
