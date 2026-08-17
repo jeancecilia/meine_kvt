@@ -1,16 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import {
-  FlaskConical,
-  Plus,
-  Sparkles,
-  CheckCircle2,
-  X,
   ArrowRight,
+  CheckCircle2,
+  FlaskConical,
   Loader2,
-  TrendingDown,
-  TrendingUp,
+  Search,
+  Sparkles,
 } from 'lucide-react';
 
 interface Observation {
@@ -43,501 +41,124 @@ interface ExperimentItem {
   observations?: Observation[];
 }
 
+function Delta({ label, before, after }: { label: string; before: string | number | null; after: string | number | null }) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-2 text-center">
+      <div className="text-[10px] text-slate-500">{label}</div>
+      <div className="font-mono font-bold text-slate-200 mt-0.5">
+        {before ?? '?'} <span className="text-slate-600">→</span> <span className="text-emerald-400">{after ?? '?'}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function ExperimentsPage() {
   const [experimentList, setExperimentList] = useState<ExperimentItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedExpId, setSelectedExpId] = useState<string | null>(null);
-  const [showObsModal, setShowObsModal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  // Observation Form State
-  const [triggerSituation, setTriggerSituation] = useState('');
-  const [moodBefore, setMoodBefore] = useState(5.0);
-  const [moodAfter, setMoodAfter] = useState(6.5);
-  const [lonelinessBefore, setLonelinessBefore] = useState(7.0);
-  const [lonelinessAfter, setLonelinessAfter] = useState(3.5);
-  const [connectionBefore, setConnectionBefore] = useState(8.0);
-  const [connectionAfter, setConnectionAfter] = useState(4.0);
-  const [romanticBefore, setRomanticBefore] = useState(7.0);
-  const [romanticAfter, setRomanticAfter] = useState(3.0);
-  const [noveltyBefore, setNoveltyBefore] = useState(6.5);
-  const [noveltyAfter, setNoveltyAfter] = useState(3.0);
-  const [actionTaken, setActionTaken] = useState('');
-  const [note, setNote] = useState('');
-
-  const fetchExperiments = async () => {
-    try {
-      const res = await fetch('/api/experiments');
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setExperimentList(data);
-      }
-    } catch {
-      console.error('Failed to load experiments');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
-    fetchExperiments();
+    const load = async () => {
+      try {
+        const response = await fetch('/api/experiments', { cache: 'no-store' });
+        const data = await response.json();
+        if (Array.isArray(data)) setExperimentList(data);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   }, []);
 
-  const handleCreateObservation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedExpId) return;
-    setSubmitting(true);
-
-    try {
-      const res = await fetch(`/api/experiments/${selectedExpId}/observations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          triggerSituation,
-          moodBefore,
-          moodAfter,
-          lonelinessBefore,
-          lonelinessAfter,
-          connectionNeedBefore: connectionBefore,
-          connectionNeedAfter: connectionAfter,
-          romanticSexualNeedBefore: romanticBefore,
-          romanticSexualNeedAfter: romanticAfter,
-          noveltyDriveBefore: noveltyBefore,
-          noveltyDriveAfter: noveltyAfter,
-          actionTaken,
-          note,
-        }),
-      });
-
-      if (!res.ok) throw new Error('Speichern fehlgeschlagen');
-
-      setShowObsModal(false);
-      // Reset form
-      setTriggerSituation('');
-      setActionTaken('');
-      setNote('');
-      fetchExperiments();
-    } catch {
-      alert('Fehler beim Speichern der Beobachtung');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-800/80 pb-5">
-        <div>
-          <div className="flex items-center gap-2 text-purple-400 text-xs font-semibold uppercase tracking-wider mb-1">
-            <FlaskConical className="w-4 h-4" />
-            Verhaltensexperimente
-          </div>
-          <h1 className="text-2xl font-bold text-slate-100">Aktive & Geplante Experimente</h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Empirische Überprüfung von Annahmen und Verhaltensmustern im Alltag.
-          </p>
+    <div className="space-y-6 max-w-5xl mx-auto">
+      <div className="border-b border-slate-800/80 pb-5">
+        <div className="flex items-center gap-2 text-purple-400 text-xs font-semibold uppercase tracking-wider mb-1">
+          <FlaskConical className="w-4 h-4" /> Verhaltensexperimente
         </div>
+        <h1 className="text-2xl font-bold text-slate-100">Aktive & geplante Experimente</h1>
+        <p className="text-xs text-slate-400 mt-1">Hypothesen werden durch reale Situationen geprüft, nicht durch pauschale Interpretation einzelner Verhaltensweisen.</p>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 text-slate-400 text-xs gap-2">
-          <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-          <span>Lade Experimente...</span>
+        <div className="flex items-center justify-center gap-2 py-20 text-xs text-slate-500">
+          <Loader2 className="w-4 h-4 animate-spin text-purple-400" /> Experimente werden geladen…
         </div>
       ) : (
         <div className="space-y-6">
-          {experimentList.map((exp) => (
-            <div key={exp.id} className="bg-slate-900/70 border border-slate-800/90 rounded-2xl p-6 space-y-6 shadow-xl">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold bg-purple-500/10 text-purple-300 border border-purple-500/20 px-3 py-1 rounded-lg flex items-center gap-1.5">
-                  <FlaskConical className="w-3.5 h-3.5 text-purple-400" />
-                  <span>{exp.title}</span>
-                </span>
-                <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-medium">
-                  {exp.status === 'active' ? 'Aktiv (Laufzeit 7 Tage)' : exp.status}
+          {experimentList.map((experiment) => (
+            <div key={experiment.id} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 space-y-5 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <FlaskConical className="w-4 h-4 text-purple-400" />
+                  <h2 className="font-bold text-slate-100">{experiment.title}</h2>
+                </div>
+                <span className={`self-start text-[11px] px-2.5 py-0.5 rounded-full border ${experiment.status === 'active' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                  {experiment.status}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/60 space-y-1.5">
-                  <div className="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">Arbeitshypothese</div>
-                  <div className="text-slate-200 leading-relaxed">{exp.hypothesis}</div>
+                <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-1.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Arbeitshypothese</div>
+                  <div className="text-slate-300 leading-relaxed">{experiment.hypothesis}</div>
                 </div>
-
-                <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/60 space-y-1.5">
-                  <div className="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">Erwartete Vorhersage</div>
-                  <div className="text-slate-200 leading-relaxed">{exp.prediction}</div>
+                <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-1.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Vorhersage</div>
+                  <div className="text-slate-300 leading-relaxed">{experiment.prediction}</div>
                 </div>
               </div>
 
-              {exp.instructions && (
-                <div className="bg-purple-500/5 border border-purple-500/15 p-4 rounded-xl space-y-2 text-xs">
-                  <div className="font-semibold text-purple-300 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-purple-400" />
-                    <span>Konkreter Handlungsauftrag:</span>
-                  </div>
-                  <p className="text-slate-300 leading-relaxed">{exp.instructions}</p>
+              {experiment.instructions && (
+                <div className="rounded-xl border border-purple-500/15 bg-purple-500/5 p-4 text-xs">
+                  <div className="flex items-center gap-1.5 font-semibold text-purple-300 mb-2"><Sparkles className="w-4 h-4" /> Vorgehen</div>
+                  <p className="text-slate-300 leading-relaxed">{experiment.instructions}</p>
                 </div>
               )}
 
-              {/* Logged Observations Section */}
-              <div className="space-y-3 pt-2">
+              {experiment.id === 'exp-001' && experiment.status === 'active' && (
+                <div className="rounded-xl border border-teal-500/25 bg-teal-500/5 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-100"><Search className="w-4 h-4 text-teal-400" /> Erst Motiv, dann Intervention</div>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-2xl">Bei jedem realen Dating-/Tinder-Impuls zunächst Libido, Verbundenheit, Einsamkeit, Neuheit, Bestätigung, Dating-Interesse und Langeweile trennen. Nur relevante Einsamkeit/Verbundenheit löst den Connection-Test aus.</p>
+                  </div>
+                  <Link href="/motive-check" className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 px-4 py-2.5 text-xs font-semibold text-white">
+                    Motivcheck starten <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              )}
+
+              <div className="border-t border-slate-800 pt-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                    Protokollierte Beobachtungen ({exp.observations?.length || 0})
-                  </h3>
-                  <button
-                    onClick={() => {
-                      setSelectedExpId(exp.id);
-                      setShowObsModal(true);
-                    }}
-                    className="flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-medium px-3.5 py-1.5 rounded-xl shadow-lg shadow-purple-900/20"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Beobachtung hinzufügen</span>
-                  </button>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">Abgeschlossene Connection-Tests</h3>
+                  <span className="text-[11px] text-slate-500">{experiment.observations?.length || 0} Beobachtungen</span>
                 </div>
 
-                {exp.observations && exp.observations.length > 0 ? (
+                {experiment.observations && experiment.observations.length > 0 ? (
                   <div className="space-y-3">
-                    {exp.observations.map((obs) => (
-                      <div key={obs.id} className="bg-slate-950/70 border border-slate-800 p-4 rounded-xl space-y-3 text-xs">
-                        <div className="flex items-center justify-between text-[11px] text-slate-400">
-                          <span className="font-semibold text-slate-200">
-                            {obs.triggerSituation || 'Einsamkeitsimpuls'}
-                          </span>
-                          <span>
-                            {new Date(obs.observedAt).toLocaleDateString('de-DE', {
-                              day: '2-digit',
-                              month: 'short',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
+                    {experiment.observations.map((observation) => (
+                      <div key={observation.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3 text-xs">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                          <div className="flex items-center gap-2 font-semibold text-slate-200"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> {observation.triggerSituation || 'Dating-/Tinder-Impuls'}</div>
+                          <div className="text-[10px] text-slate-500">{new Date(observation.observedAt).toLocaleString('de-DE')}</div>
                         </div>
-
-                        {/* Rating Deltas Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
-                          <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                            <div className="text-[10px] text-slate-400">Stimmung</div>
-                            <div className="font-mono font-bold text-emerald-400 flex items-center justify-center gap-1 mt-0.5">
-                              <span>{obs.moodBefore ?? '?'}</span>
-                              <span>→</span>
-                              <span>{obs.moodAfter ?? '?'}</span>
-                            </div>
-                          </div>
-
-                          <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                            <div className="text-[10px] text-slate-400">Einsamkeit</div>
-                            <div className="font-mono font-bold text-amber-400 flex items-center justify-center gap-1 mt-0.5">
-                              <span>{obs.lonelinessBefore}</span>
-                              <span>→</span>
-                              <span className="text-emerald-400">{obs.lonelinessAfter ?? '?'}</span>
-                            </div>
-                          </div>
-
-                          <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                            <div className="text-[10px] text-slate-400">Connection Need</div>
-                            <div className="font-mono font-bold text-sky-400 flex items-center justify-center gap-1 mt-0.5">
-                              <span>{obs.connectionNeedBefore}</span>
-                              <span>→</span>
-                              <span className="text-emerald-400">{obs.connectionNeedAfter ?? '?'}</span>
-                            </div>
-                          </div>
-
-                          <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                            <div className="text-[10px] text-slate-400">Romantik/Frau</div>
-                            <div className="font-mono font-bold text-rose-400 flex items-center justify-center gap-1 mt-0.5">
-                              <span>{obs.romanticSexualNeedBefore}</span>
-                              <span>→</span>
-                              <span className="text-emerald-400">{obs.romanticSexualNeedAfter ?? '?'}</span>
-                            </div>
-                          </div>
-
-                          <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                            <div className="text-[10px] text-slate-400">Neuheitsdrang</div>
-                            <div className="font-mono font-bold text-purple-400 flex items-center justify-center gap-1 mt-0.5">
-                              <span>{obs.noveltyDriveBefore}</span>
-                              <span>→</span>
-                              <span className="text-emerald-400">{obs.noveltyDriveAfter ?? '?'}</span>
-                            </div>
-                          </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                          <Delta label="Stimmung" before={observation.moodBefore} after={observation.moodAfter} />
+                          <Delta label="Einsamkeit" before={observation.lonelinessBefore} after={observation.lonelinessAfter} />
+                          <Delta label="Verbundenheit" before={observation.connectionNeedBefore} after={observation.connectionNeedAfter} />
+                          <Delta label="Libido / Sex" before={observation.romanticSexualNeedBefore} after={observation.romanticSexualNeedAfter} />
+                          <Delta label="Neuheit" before={observation.noveltyDriveBefore} after={observation.noveltyDriveAfter} />
                         </div>
-
-                        {obs.actionTaken && (
-                          <div className="text-[11px] text-slate-300 bg-slate-900/50 p-2 rounded-lg">
-                            <strong>Durchgeführte Handlung:</strong> {obs.actionTaken}
-                          </div>
-                        )}
-                        {obs.note && (
-                          <div className="text-[11px] text-slate-400 italic">
-                            &ldquo;{obs.note}&rdquo;
-                          </div>
-                        )}
+                        {observation.actionTaken && <div className="rounded-lg bg-slate-900/70 p-2 text-[11px] text-slate-400"><strong className="text-slate-300">Handlung:</strong> {observation.actionTaken}</div>}
+                        {observation.note && <div className="text-[11px] text-slate-500 italic">{observation.note}</div>}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-slate-950/40 p-4 rounded-xl text-center text-slate-500 text-xs">
-                    Noch keine Beobachtung eingetragen. Klicke auf „Beobachtung hinzufügen“, sobald du Einsamkeit bemerkst.
-                  </div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4 text-center text-xs text-slate-500">Noch kein Connection-Test abgeschlossen. Reine Libido-/Neuheits-/Dating-Motive werden im Motivcheck trotzdem als wichtige Gegenbeispiele gespeichert.</div>
                 )}
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Observation Modal */}
-      {showObsModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl my-8">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2 text-purple-400 text-xs font-semibold uppercase tracking-wider">
-                <FlaskConical className="w-4 h-4" />
-                <span>Experiment-Beobachtung erfassen</span>
-              </div>
-              <button onClick={() => setShowObsModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateObservation} className="space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Auslöser / Situation</label>
-                <input
-                  type="text"
-                  required
-                  value={triggerSituation}
-                  onChange={(e) => setTriggerSituation(e.target.value)}
-                  placeholder="z.B. Allein zu Hause, Impuls Tinder zu öffnen"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-purple-500/50"
-                />
-              </div>
-
-              {/* Before vs After Grid */}
-              <div className="space-y-3 p-3 bg-slate-950/60 rounded-xl border border-slate-800/60">
-                <div className="text-[11px] font-semibold text-slate-300">Ratings (0 bis 10) – Vorher vs. Nachher:</div>
-
-                {/* Mood Before / After */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Stimmung VORHER</span>
-                      <span className="font-mono text-emerald-400">{moodBefore}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      value={moodBefore}
-                      onChange={(e) => setMoodBefore(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Stimmung NACHHER</span>
-                      <span className="font-mono text-emerald-400">{moodAfter}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      value={moodAfter}
-                      onChange={(e) => setMoodAfter(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
-                    />
-                  </div>
-                </div>
-
-                {/* Loneliness Before / After */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Einsamkeit VORHER</span>
-                      <span className="font-mono text-amber-400">{lonelinessBefore}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      value={lonelinessBefore}
-                      onChange={(e) => setLonelinessBefore(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-amber-400 cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Einsamkeit NACHHER</span>
-                      <span className="font-mono text-emerald-400">{lonelinessAfter}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      value={lonelinessAfter}
-                      onChange={(e) => setLonelinessAfter(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
-                    />
-                  </div>
-                </div>
-
-                {/* Connection Need Before / After */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Connection Need VOR</span>
-                      <span className="font-mono text-sky-400">{connectionBefore}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      value={connectionBefore}
-                      onChange={(e) => setConnectionBefore(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-sky-400 cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Connection Need NACH</span>
-                      <span className="font-mono text-emerald-400">{connectionAfter}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      value={connectionAfter}
-                      onChange={(e) => setConnectionAfter(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
-                    />
-                  </div>
-                </div>
-
-                {/* Romantic Need Before / After */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Romantik / Frau VOR</span>
-                      <span className="font-mono text-rose-400">{romanticBefore}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      value={romanticBefore}
-                      onChange={(e) => setRomanticBefore(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-rose-400 cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Romantik / Frau NACH</span>
-                      <span className="font-mono text-emerald-400">{romanticAfter}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      value={romanticAfter}
-                      onChange={(e) => setRomanticAfter(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
-                    />
-                  </div>
-                </div>
-
-                {/* Novelty Drive Before / After */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Neuheitsdrang VOR</span>
-                      <span className="font-mono text-purple-400">{noveltyBefore}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      value={noveltyBefore}
-                      onChange={(e) => setNoveltyBefore(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-purple-400 cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Neuheitsdrang NACH</span>
-                      <span className="font-mono text-emerald-400">{noveltyAfter}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      value={noveltyAfter}
-                      onChange={(e) => setNoveltyAfter(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-900 rounded-lg accent-emerald-400 cursor-pointer"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Durchgeführte Handlung</label>
-                <input
-                  type="text"
-                  required
-                  value={actionTaken}
-                  onChange={(e) => setActionTaken(e.target.value)}
-                  placeholder="z.B. 20 Min. mit gutem Freund telefoniert"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-purple-500/50"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Notiz / Erkenntnis (Optional)</label>
-                <textarea
-                  rows={2}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Wie ging es dir danach? War danach noch Drang nach Tinder da?"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-100 outline-none focus:border-purple-500/50 resize-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowObsModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white"
-                >
-                  Abbrechen
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-5 py-2 rounded-xl font-medium shadow-lg shadow-purple-900/30 disabled:opacity-50"
-                >
-                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                  <span>Beobachtung speichern</span>
-                </button>
-              </div>
-            </form>
-          </div>
         </div>
       )}
     </div>
