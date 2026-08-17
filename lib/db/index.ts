@@ -5,11 +5,47 @@ import { bootstrapDatabase } from './bootstrap';
 
 const connectionString = process.env.DATABASE_URL || 'postgres://therapy:therapy_password@localhost:5433/therapy';
 
-export const client = postgres(connectionString, {
+const rawClient = postgres(connectionString, {
   max: 10,
   idle_timeout: 20,
   connect_timeout: 10,
 });
+
+/**
+ * Next.js production bundles can hand Postgres.js Date objects originating from
+ * another JS realm/module context. Postgres.js detects dates with `instanceof Date`;
+ * if that check misses, the raw Date reaches its wire-buffer writer and throws
+ * ERR_INVALID_ARG_TYPE. Normalize top-level tagged-template Date parameters to
+ * ISO strings at the single database boundary. PostgreSQL still infers/casts the
+ * target timestamp/date type from the surrounding SQL expression or column.
+ */
+function normalizeSqlParameter(value: unknown): unknown {
+  if (Object.prototype.toString.call(value) !== '[object Date]') return value;
+
+  const date = value as Date;
+  if (Number.isNaN(date.getTime())) {
+    throw new TypeError('Invalid Date cannot be used as a PostgreSQL parameter');
+  }
+
+  return date.toISOString();
+}
+
+export const client = new Proxy(rawClient, {
+  apply(target, thisArg, argArray) {
+    const [strings, ...values] = argArray;
+    const isTaggedTemplate = Array.isArray(strings)
+      && Object.prototype.hasOwnProperty.call(strings, 'raw');
+
+    if (!isTaggedTemplate) {
+      return Reflect.apply(target, thisArg, argArray);
+    }
+
+    return Reflect.apply(target, thisArg, [
+      strings,
+      ...values.map(normalizeSqlParameter),
+    ]);
+  },
+}) as typeof rawClient;
 
 export const db = drizzle(client, { schema });
 
