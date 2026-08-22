@@ -4,12 +4,24 @@ import {
   refreshAutomaticMemoryConsolidations,
   retrieveTherapeuticMemory,
 } from '@/lib/therapy/memory';
+import { ensureFocusedSessionMemory20260817 } from '@/lib/therapy/focused-session-memory';
+import { ensureFocusedSessionMemory20260822 } from '@/lib/therapy/focused-session-memory-2026-08-22';
 import { syncLongitudinalHistory } from '@/lib/therapy/memory-history';
+
+async function ensureImportedFocusedSessions(): Promise<void> {
+  // v0.4 depends on the v0.3 import, so keep the historical order explicit.
+  await ensureFocusedSessionMemory20260817();
+  await ensureFocusedSessionMemory20260822();
+}
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const query = (searchParams.get('q') || '').trim();
+
+    // Opening/searching the memory workspace is enough to persist structured
+    // focused-session imports into PostgreSQL, even before therapy chat is used.
+    await ensureImportedFocusedSessions();
 
     // Keep current hypothesis revisions and treatment-phase snapshots in sync
     // whenever the memory workspace is opened or searched.
@@ -37,6 +49,8 @@ export async function POST(request: Request) {
     if (body?.action !== 'refresh') {
       return NextResponse.json({ error: 'Unbekannte Memory-Aktion' }, { status: 400 });
     }
+
+    await ensureImportedFocusedSessions();
     await refreshAutomaticMemoryConsolidations(new Date());
     await syncLongitudinalHistory(new Date());
     const dashboard = await getMemoryDashboardData();
