@@ -85,3 +85,67 @@ jobs:
           grep -q '"corrections"' /tmp/memory-search.json
 
           echo "Therapeutic Memory runtime smoke test passed"
+
+      - name: Validate non-sensitive GitHub sync manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run sync:status
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const status = JSON.parse(fs.readFileSync('sync-status.json', 'utf8'));
+
+          const topKeys = Object.keys(status).sort();
+          const expectedTop = ['database', 'generated_at', 'schema_version', 'state_hash'].sort();
+          if (JSON.stringify(topKeys) !== JSON.stringify(expectedTop)) {
+            throw new Error(`Unexpected top-level sync-status keys: ${topKeys.join(', ')}`);
+          }
+
+          const databaseKeys = Object.keys(status.database || {}).sort();
+          const expectedDatabase = [
+            'active_memory_count',
+            'checkin_count',
+            'completed_session_count',
+            'last_checkin_at',
+            'latest_memory_updated_at',
+          ].sort();
+          if (JSON.stringify(databaseKeys) !== JSON.stringify(expectedDatabase)) {
+            throw new Error(`Unexpected database metadata keys: ${databaseKeys.join(', ')}`);
+          }
+
+          if (status.schema_version !== 1) throw new Error('Unexpected sync-status schema version');
+          if (!status.generated_at || Number.isNaN(Date.parse(status.generated_at))) {
+            throw new Error('generated_at must be an ISO timestamp');
+          }
+          if (!/^sha256:[0-9a-f]{64}$/.test(status.state_hash || '')) {
+            throw new Error('state_hash must be a SHA-256 digest');
+          }
+
+          for (const key of ['checkin_count', 'active_memory_count', 'completed_session_count']) {
+            if (!Number.isInteger(status.database[key]) || status.database[key] < 0) {
+              throw new Error(`${key} must be a non-negative integer`);
+            }
+          }
+
+          if (status.database.active_memory_count < 1) {
+            throw new Error('Memory smoke test should have materialized at least one active memory');
+          }
+          if (status.database.completed_session_count < 1) {
+            throw new Error('Focused-session imports should have materialized completed sessions');
+          }
+
+          const serialized = JSON.stringify(status).toLowerCase();
+          const forbidden = [
+            'mood', 'fulfillment', 'loneliness', 'inner_calm', 'joy', 'rumination',
+            'future_anxiety', 'novelty_drive', 'energy', 'life_satisfaction', 'sleep_quality',
+            'note', 'content', 'key_insight', 'key_observations', 'homework', 'message',
+          ];
+          for (const term of forbidden) {
+            if (serialized.includes(term)) {
+              throw new Error(`Sensitive field name leaked into sync-status.json: ${term}`);
+            }
+          }
+
+          console.log('Non-sensitive sync manifest validation passed');
+          NODE

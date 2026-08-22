@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "generated_at": null,
+  "database": {
+    "last_checkin_at": null,
+    "checkin_count": 0,
+    "active_memory_count": 0,
+    "latest_memory_updated_at": null,
+    "completed_session_count": 0
+  },
+  "state_hash": null
+}
