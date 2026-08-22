@@ -5,21 +5,35 @@ import { TrendingUp, Activity, Sparkles, ArrowUpRight, ArrowDownRight } from 'lu
 
 export const revalidate = 0;
 
+type MetricDirection = 'higher' | 'lower' | 'neutral';
+
+type ProgressMetric = {
+  key: string;
+  label: string;
+  color: string;
+  baseline: number;
+  direction: MetricDirection;
+};
+
 export default async function ProgressPage() {
   const checkinList = await db.select().from(dailyCheckins).orderBy(desc(dailyCheckins.date)).limit(14).catch(() => []);
   const reversedList = [...checkinList].reverse();
 
-  // Core metrics config
-  const metrics = [
-    { key: 'mood', label: 'Stimmung', color: '#10b981', baseline: 5.5 },
-    { key: 'loneliness', label: 'Einsamkeit', color: '#f59e0b', baseline: 7.0 },
-    { key: 'rumination', label: 'Grübeln', color: '#f43f5e', baseline: 6.5 },
-    { key: 'noveltyDrive', label: 'Neuheitsdrang', color: '#a855f7', baseline: 7.0 },
-    { key: 'joy', label: 'Freude / Positiver Affekt', color: '#6366f1', baseline: 4.0 },
-    { key: 'fulfillment', label: 'Erfüllung / Zufriedenheit', color: '#14b8a6', baseline: 4.0 },
-    { key: 'innerCalm', label: 'Innere Ruhe', color: '#0ea5e9', baseline: 5.0 },
-    { key: 'energy', label: 'Energie & Antrieb', color: '#eab308', baseline: 6.0 },
-    { key: 'lifeSatisfaction', label: 'Lebenszufriedenheit', color: '#2dd4bf', baseline: 5.0 },
+  // Complete T0 baseline: the same ten dimensions used in the daily check-in.
+  // "direction" controls only whether a change is rendered as favourable or
+  // unfavourable. Novelty drive is intentionally neutral: its level is useful
+  // clinical information, but higher/lower is not automatically good/bad.
+  const metrics: ProgressMetric[] = [
+    { key: 'mood', label: 'Stimmung', color: '#10b981', baseline: 5.5, direction: 'higher' },
+    { key: 'loneliness', label: 'Einsamkeit', color: '#f59e0b', baseline: 7.0, direction: 'lower' },
+    { key: 'rumination', label: 'Grübeln', color: '#f43f5e', baseline: 6.5, direction: 'lower' },
+    { key: 'noveltyDrive', label: 'Neuheitsdrang', color: '#a855f7', baseline: 7.0, direction: 'neutral' },
+    { key: 'joy', label: 'Freude / Positiver Affekt', color: '#6366f1', baseline: 4.0, direction: 'higher' },
+    { key: 'fulfillment', label: 'Erfüllung / Zufriedenheit', color: '#14b8a6', baseline: 4.0, direction: 'higher' },
+    { key: 'innerCalm', label: 'Innere Ruhe', color: '#0ea5e9', baseline: 5.0, direction: 'higher' },
+    { key: 'futureAnxiety', label: 'Zukunfts- / Existenzangst', color: '#fb7185', baseline: 6.0, direction: 'lower' },
+    { key: 'energy', label: 'Energie & Antrieb', color: '#eab308', baseline: 6.0, direction: 'higher' },
+    { key: 'lifeSatisfaction', label: 'Lebenszufriedenheit', color: '#2dd4bf', baseline: 5.0, direction: 'higher' },
   ];
 
   return (
@@ -44,10 +58,15 @@ export default async function ProgressPage() {
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {metrics.slice(0, 6).map((m) => {
+          {metrics.map((m) => {
             const rawVal = checkinList[0] ? (checkinList[0] as any)[m.key] : m.baseline;
             const latestVal = typeof rawVal === 'number' ? rawVal : parseFloat(rawVal || String(m.baseline));
             const diff = latestVal - m.baseline;
+            const deltaClass = m.direction === 'neutral'
+              ? 'text-slate-300'
+              : m.direction === 'lower'
+                ? diff < 0 ? 'text-emerald-400' : 'text-rose-400'
+                : diff > 0 ? 'text-emerald-400' : 'text-rose-400';
 
             return (
               <div key={m.key} className="bg-slate-900/70 border border-slate-800/90 rounded-2xl p-4 space-y-3 shadow-lg">
@@ -63,11 +82,7 @@ export default async function ProgressPage() {
                   </div>
 
                   {diff !== 0 ? (
-                    <span className={`text-xs font-mono font-bold flex items-center gap-0.5 ${
-                      (m.key === 'loneliness' || m.key === 'rumination')
-                        ? diff < 0 ? 'text-emerald-400' : 'text-rose-400'
-                        : diff > 0 ? 'text-emerald-400' : 'text-rose-400'
-                    }`}>
+                    <span className={`text-xs font-mono font-bold flex items-center gap-0.5 ${deltaClass}`}>
                       {diff > 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
                       {diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1)}
                     </span>
@@ -99,6 +114,12 @@ export default async function ProgressPage() {
                     />
                   </svg>
                 </div>
+
+                {m.direction === 'neutral' && (
+                  <p className="text-[10px] leading-relaxed text-slate-600">
+                    Intensitätswert – Veränderung ist nicht automatisch günstig oder ungünstig.
+                  </p>
+                )}
               </div>
             );
           })}
