@@ -4,15 +4,8 @@ import {
   refreshAutomaticMemoryConsolidations,
   retrieveTherapeuticMemory,
 } from '@/lib/therapy/memory';
-import { ensureFocusedSessionMemory20260817 } from '@/lib/therapy/focused-session-memory';
-import { ensureFocusedSessionMemory20260822 } from '@/lib/therapy/focused-session-memory-2026-08-22';
+import { ensureImportedFocusedSessions } from '@/lib/therapy/imported-focused-sessions';
 import { syncLongitudinalHistory } from '@/lib/therapy/memory-history';
-
-async function ensureImportedFocusedSessions(): Promise<void> {
-  // v0.4 depends on the v0.3 import, so keep the historical order explicit.
-  await ensureFocusedSessionMemory20260817();
-  await ensureFocusedSessionMemory20260822();
-}
 
 export async function GET(request: Request) {
   try {
