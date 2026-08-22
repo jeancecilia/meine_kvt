@@ -6,7 +6,8 @@
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sync:status": "node scripts/generate-sync-status.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.5",
