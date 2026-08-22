@@ -1,5 +1,7 @@
 import { BrainCircuit, Database, History, ShieldCheck, Sparkles, Link2 } from 'lucide-react';
 import { getMemoryDashboardData } from '@/lib/therapy/memory';
+import { ensureImportedFocusedSessions } from '@/lib/therapy/imported-focused-sessions';
+import { syncLongitudinalHistory } from '@/lib/therapy/memory-history';
 import { MemorySearch } from '@/components/memory/memory-search';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +15,12 @@ function dateLabel(value: string | Date | null | undefined): string {
 }
 
 export default async function MemoryPage() {
+  // Opening the workspace itself must be sufficient to materialize imported
+  // focused sessions. Previously only /api/memory did this, so the server page
+  // could render stale counts until search/refresh/chat happened.
+  await ensureImportedFocusedSessions();
+  await syncLongitudinalHistory(new Date());
+
   const data = await getMemoryDashboardData();
   const counts = data.counts as any;
 
