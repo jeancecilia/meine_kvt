@@ -5,8 +5,7 @@ import { therapySessions, therapyMessages } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { buildTherapyContext } from '@/lib/therapy/context';
 import { evaluateSafetyRisk } from '@/lib/therapy/safety';
-import { ensureFocusedSessionMemory20260817 } from '@/lib/therapy/focused-session-memory';
-import { ensureFocusedSessionMemory20260822 } from '@/lib/therapy/focused-session-memory-2026-08-22';
+import { ensureImportedFocusedSessions } from '@/lib/therapy/imported-focused-sessions';
 import { syncLongitudinalHistory } from '@/lib/therapy/memory-history';
 
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
@@ -36,8 +35,7 @@ export async function POST(request: Request) {
     // Persist structured learnings imported from the surrounding ChatGPT work
     // before generating future therapy responses. Imports are idempotent and
     // intentionally contain structured memory rather than verbatim transcripts.
-    await ensureFocusedSessionMemory20260817();
-    await ensureFocusedSessionMemory20260822();
+    await ensureImportedFocusedSessions();
 
     // Snapshot hypothesis revisions and the current/completed treatment phases
     // before retrieval so changes remain reconstructable months or years later.
